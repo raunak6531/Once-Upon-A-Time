@@ -186,7 +186,7 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
                 onRelocated?.(location.start.cfi, progress);
 
                 // Find current chapter with fallback
-                let chapter = book.navigation.get(location.start.cfi);
+                let chapter: any = book.navigation.get(location.start.cfi);
                 
                 // Fallback: search spine/href if exact CFI match fails
                 if (!chapter && book.spine) {

@@ -1,18 +1,14 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## Deployment
 
-First, run the development server:
+To deploy this project to Vercel:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Install the Vercel CLI: `npm i -g vercel`
+2. Run `vercel` in the root directory.
+3. When prompted, add the following Environment Variables in the Vercel Dashboard:
+    - `NEXT_PUBLIC_SUPABASE_URL`
+    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
