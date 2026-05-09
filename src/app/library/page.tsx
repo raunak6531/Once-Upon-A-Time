@@ -1,8 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Book } from '@/types';
-import Navbar from '@/components/Navbar';
-import BookGrid from '@/components/BookGrid';
+import LibraryView from '@/components/LibraryView';
 
 export const metadata = {
   title: 'My Library — Once Upon A Time',
@@ -27,13 +26,5 @@ export default async function LibraryPage() {
     console.error('Failed to fetch books:', error);
   }
 
-  return (
-    <div
-      className="min-h-screen"
-      style={{ background: 'var(--theme-bg)' }}
-    >
-      <Navbar />
-      <BookGrid books={(books as Book[]) || []} />
-    </div>
-  );
+  return <LibraryView books={(books as Book[]) || []} />;
 }

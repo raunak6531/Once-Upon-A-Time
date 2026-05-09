@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import type { Book } from '@/types';
-import { ThemeProvider } from '@/components/ThemeProvider';
+
 import ReaderControls from '@/components/ReaderControls';
 
 interface ReadPageProps {
@@ -46,13 +46,14 @@ export default async function ReadPage({ params }: ReadPageProps) {
   const typedBook = book as Book;
 
   return (
-    <ThemeProvider coverUrl={typedBook.cover_url}>
+    <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
       <ReaderControls
         bookId={typedBook.id}
         bookTitle={typedBook.title}
         epubUrl={typedBook.epub_file_url}
         initialCfi={typedBook.current_cfi}
+        coverUrl={typedBook.cover_url}
       />
-    </ThemeProvider>
+    </div>
   );
 }

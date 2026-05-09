@@ -128,6 +128,7 @@ export default function UploadModal({ onClose, onUploadComplete }: UploadModalPr
 
       // Step 4: Save to database
       setStep('saving');
+      
       const { data: newBook, error: dbError } = await supabase
         .from('books')
         .insert({

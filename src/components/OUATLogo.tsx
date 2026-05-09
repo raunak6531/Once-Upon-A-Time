@@ -10,13 +10,26 @@ export function OUATLogo({ size = 48, className = '' }: { size?: number; classNa
       viewBox="0 0 64 64"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={className}
+      className={`${className} logo-shimmer`}
     >
+      <defs>
+        <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#fbbf24" />
+          <stop offset="50%" stopColor="#fde68a" />
+          <stop offset="100%" stopColor="#fbbf24" />
+          <animate
+            attributeName="x1"
+            values="0%;100%;0%"
+            dur="3s"
+            repeatCount="indefinite"
+          />
+        </linearGradient>
+      </defs>
       {/* Book body — left page */}
       <path
         d="M8 18C8 16 10 14 14 14C18 14 28 15 31 16V50C28 49 18 48 14 48C10 48 8 49 8 49V18Z"
         fill="rgba(255,255,255,0.15)"
-        stroke="rgba(255,255,255,0.5)"
+        stroke="url(#goldGradient)"
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
@@ -24,21 +37,22 @@ export function OUATLogo({ size = 48, className = '' }: { size?: number; classNa
       <path
         d="M56 18C56 16 54 14 50 14C46 14 36 15 33 16V50C36 49 46 48 50 48C54 48 56 49 56 49V18Z"
         fill="rgba(255,255,255,0.1)"
-        stroke="rgba(255,255,255,0.5)"
+        stroke="url(#goldGradient)"
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
       {/* Book spine */}
       <path
         d="M32 16V50"
-        stroke="rgba(255,255,255,0.4)"
+        stroke="url(#goldGradient)"
         strokeWidth="1.5"
         strokeLinecap="round"
+        opacity="0.6"
       />
       {/* Text lines on left page */}
-      <line x1="13" y1="22" x2="27" y2="23" stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeLinecap="round" />
-      <line x1="13" y1="26" x2="25" y2="27" stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeLinecap="round" />
-      <line x1="13" y1="30" x2="26" y2="31" stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeLinecap="round" />
+      <line x1="13" y1="22" x2="27" y2="23" stroke="rgba(251, 191, 36, 0.3)" strokeWidth="1" strokeLinecap="round" />
+      <line x1="13" y1="26" x2="25" y2="27" stroke="rgba(251, 191, 36, 0.2)" strokeWidth="1" strokeLinecap="round" />
+      <line x1="13" y1="30" x2="26" y2="31" stroke="rgba(251, 191, 36, 0.15)" strokeWidth="1" strokeLinecap="round" />
       {/* Quill pen — rising from the book */}
       <path
         d="M42 8C42 8 38 18 37 24C36 28 37 32 38 34"
@@ -53,32 +67,19 @@ export function OUATLogo({ size = 48, className = '' }: { size?: number; classNa
         fill="#fbbf24"
         opacity="0.9"
       />
-      <path
-        d="M42 8C43 7 46 5 48 6"
-        stroke="rgba(180,130,0,0.6)"
-        strokeWidth="0.8"
-        fill="none"
-      />
-      {/* Sparkle / star — the magic */}
+      {/* Magic Sparkles */}
       <g>
-        <circle cx="46" cy="14" r="1.5" fill="white" opacity="0.9">
+        <circle cx="46" cy="14" r="1.5" fill="white">
           <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite" />
+          <animate attributeName="r" values="1.5;2;1.5" dur="2s" repeatCount="indefinite" />
         </circle>
-        <circle cx="40" cy="6" r="1" fill="#fbbf24" opacity="0.7">
-          <animate attributeName="opacity" values="0.7;0.2;0.7" dur="2.5s" repeatCount="indefinite" />
+        <circle cx="40" cy="6" r="1" fill="#fbbf24">
+          <animate attributeName="opacity" values="0.7;0.1;0.7" dur="2.5s" repeatCount="indefinite" />
         </circle>
-        <circle cx="50" cy="10" r="0.8" fill="white" opacity="0.5">
-          <animate attributeName="opacity" values="0.5;0.1;0.5" dur="3s" repeatCount="indefinite" />
+        <circle cx="50" cy="10" r="0.8" fill="white">
+          <animate attributeName="opacity" values="0.5;0;0.5" dur="3s" repeatCount="indefinite" />
         </circle>
       </g>
-      {/* Four-point star sparkle */}
-      <path
-        d="M48 16L49 14L50 16L49 18Z"
-        fill="white"
-        opacity="0.6"
-      >
-        <animate attributeName="opacity" values="0.6;0.15;0.6" dur="1.8s" repeatCount="indefinite" />
-      </path>
     </svg>
   );
 }

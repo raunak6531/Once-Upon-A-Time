@@ -16,30 +16,21 @@ export default function Navbar() {
   };
 
   return (
-    <nav
-      className="sticky top-0 z-40 px-6 py-4 flex items-center justify-between"
-      style={{
-        background: 'rgba(255,255,255,0.03)',
-        backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid var(--theme-border)',
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <OUATLogo size={32} />
-        <h1
-          className="text-lg font-bold"
-          style={{ fontFamily: 'var(--font-serif)', color: 'var(--theme-text)' }}
-        >
-          Once Upon A Time
-        </h1>
+    <nav className="library-nav">
+      <div className="library-nav-brand">
+        <OUATLogo size={30} />
+        <div className="library-nav-wordmark">
+          <span className="library-nav-title">Once Upon A Time</span>
+          <span className="library-nav-tagline">Personal Library</span>
+        </div>
       </div>
 
       <button
         id="logout-btn"
         onClick={handleLogout}
-        className="btn-ghost"
+        className="btn-3d btn-3d-slate library-nav-signout"
       >
-        <LogOut className="w-4 h-4" />
+        <LogOut className="w-3.5 h-3.5" />
         <span className="hidden sm:inline">Sign Out</span>
       </button>
     </nav>
