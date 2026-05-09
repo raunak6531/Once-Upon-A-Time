@@ -1,16 +1,108 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react';
-import type { ReaderSettings } from '@/types';
+import type { ReaderHighlight, ReaderSearchResult, ReaderSettings, TocEntry } from '@/types';
 
 interface EpubReaderProps {
   url: string;
   initialCfi?: string | null;
   settings: ReaderSettings;
+  highlights?: ReaderHighlight[];
   onRelocated?: (cfi: string, progress: number) => void;
   onReady?: () => void;
-  onTocLoaded?: (toc: any[]) => void;
+  onTocLoaded?: (toc: TocEntry[]) => void;
   onChapterChange?: (chapterTitle: string) => void;
+  onTextSelected?: (selection: { cfi: string; text: string }) => void;
+  onHighlightClick?: (highlight: ReaderHighlight) => void;
+}
+
+type ThemeStyleValue = string | number | Record<string, string | number>;
+type ThemeStyles = Record<string, ThemeStyleValue>;
+
+interface RenditionLocation {
+  start?: {
+    cfi?: string;
+  };
+}
+
+interface NavigationEntry {
+  href: string;
+  label?: string;
+}
+
+interface EpubContents {
+  window?: Window;
+}
+
+interface EpubSearchMatch {
+  cfi: string;
+  excerpt: string;
+}
+
+interface EpubSection {
+  contents?: unknown;
+  href: string;
+  index: number;
+  linear: boolean;
+  load: (request?: unknown) => unknown;
+  unload: () => void;
+  find: (query: string) => EpubSearchMatch[];
+  search?: (query: string) => EpubSearchMatch[];
+}
+
+interface EpubSpine {
+  each: (callback: (section: EpubSection) => void) => void;
+}
+
+interface EpubBook {
+  getRange: (cfi: string) => Promise<Range | null>;
+  load: (path: string) => Promise<unknown>;
+  locations: {
+    cfiFromPercentage: (percent: number) => string;
+    generate: (chars: number) => Promise<unknown>;
+    percentageFromCfi: (cfi: string) => number;
+  };
+  navigation: {
+    get: (target: string) => NavigationEntry | undefined;
+    toc: TocEntry[];
+  };
+  ready: Promise<unknown>;
+  renderTo: (container: HTMLElement, options: Record<string, string | number>) => EpubRendition;
+  spine: EpubSpine & {
+    get: (target: string | number) => EpubSection | null;
+  };
+  destroy: () => void;
+}
+
+interface EpubRendition {
+  annotations: {
+    highlight: (
+      cfi: string,
+      data?: Record<string, string>,
+      cb?: () => void,
+      className?: string,
+      styles?: Record<string, string>
+    ) => void;
+    remove: (cfi: string, type?: 'highlight' | 'underline' | 'mark') => void;
+    underline: (
+      cfi: string,
+      data?: Record<string, string>,
+      cb?: () => void,
+      className?: string,
+      styles?: Record<string, string>
+    ) => void;
+  };
+  destroy: () => void;
+  display: (target?: string) => Promise<unknown>;
+  next: () => void;
+  on: (event: string, callback: (...args: never[]) => void) => void;
+  prev: () => void;
+  resize: (width: number, height: number) => void;
+  themes: {
+    fontSize: (size: string) => void;
+    register: (name: string, styles: ThemeStyles) => void;
+    select: (name: string) => void;
+  };
 }
 
 export interface EpubReaderRef {
@@ -18,18 +110,60 @@ export interface EpubReaderRef {
   prevPage: () => void;
   display: (cfi: string) => void;
   goToPercentage: (percent: number) => void;
+  searchBook: (query: string) => Promise<ReaderSearchResult[]>;
+  showSearchResult: (cfi: string) => void;
 }
 
 const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
-  ({ url, initialCfi, settings, onRelocated, onReady, onTocLoaded, onChapterChange }, ref) => {
+  ({
+    url,
+    initialCfi,
+    settings,
+    highlights = [],
+    onRelocated,
+    onReady,
+    onTocLoaded,
+    onChapterChange,
+    onTextSelected,
+    onHighlightClick,
+  }, ref) => {
     const viewerRef = useRef<HTMLDivElement>(null);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const renditionRef = useRef<any>(null);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bookRef = useRef<any>(null);
+    const renditionRef = useRef<EpubRendition | null>(null);
+    const bookRef = useRef<EpubBook | null>(null);
     const cleanupRef = useRef<(() => void) | null>(null);
+    const renderedHighlightsRef = useRef<Set<string>>(new Set());
+    const temporarySearchCfiRef = useRef<string | null>(null);
+    const temporarySearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRenditionReady, setIsRenditionReady] = useState(false);
     const initializedRef = useRef(false);
+
+    const chapterForSection = useCallback((section: EpubSection) => {
+      const exact = bookRef.current?.navigation.get(section.href);
+      if (exact?.label) return exact.label.trim().replace(/\s+/g, ' ');
+
+      const nestedFind = (items: TocEntry[]): TocEntry | undefined => {
+        for (const item of items) {
+          if (item.href?.split('#')[0] === section.href || item.href?.includes(section.href)) return item;
+          const nested = item.subitems ? nestedFind(item.subitems) : undefined;
+          if (nested) return nested;
+        }
+      };
+
+      return nestedFind(bookRef.current?.navigation.toc || [])?.label || `Section ${section.index + 1}`;
+    }, []);
+
+    const clearTemporarySearchMark = useCallback(() => {
+      if (temporarySearchTimerRef.current) {
+        clearTimeout(temporarySearchTimerRef.current);
+        temporarySearchTimerRef.current = null;
+      }
+
+      if (temporarySearchCfiRef.current) {
+        renditionRef.current?.annotations.remove(temporarySearchCfiRef.current, 'underline');
+        temporarySearchCfiRef.current = null;
+      }
+    }, []);
 
     // Expose navigation methods via ref
     useImperativeHandle(ref, () => ({
@@ -48,7 +182,68 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
           renditionRef.current?.display(cfi);
         }
       },
-    }));
+      searchBook: async (query: string) => {
+        const book = bookRef.current;
+        const normalizedQuery = query.trim();
+        if (!book || normalizedQuery.length < 2) return [];
+
+        const sections: EpubSection[] = [];
+        book.spine.each((section) => {
+          if (section.linear) sections.push(section);
+        });
+
+        const results: ReaderSearchResult[] = [];
+
+        for (const section of sections) {
+          const wasLoaded = Boolean(section.contents);
+
+          try {
+            await section.load(book.load.bind(book));
+            const matches = section.search ? section.search(normalizedQuery) : section.find(normalizedQuery);
+            const chapter = chapterForSection(section);
+
+            matches.forEach((match, index) => {
+              results.push({
+                id: `${section.index}-${index}-${match.cfi}`,
+                cfi: match.cfi,
+                excerpt: match.excerpt.trim().replace(/\s+/g, ' '),
+                chapter,
+                sectionIndex: section.index,
+              });
+            });
+          } catch (error) {
+            console.warn('Failed to search EPUB section:', section.href, error);
+          } finally {
+            if (!wasLoaded) {
+              section.unload();
+            }
+          }
+        }
+
+        return results;
+      },
+      showSearchResult: (cfi: string) => {
+        const rendition = renditionRef.current;
+        if (!rendition) return;
+
+        clearTemporarySearchMark();
+        temporarySearchCfiRef.current = cfi;
+        rendition.annotations.underline(
+          cfi,
+          { kind: 'search-result' },
+          undefined,
+          'epubjs-search-result',
+          {
+            stroke: '#38bdf8',
+            'stroke-opacity': '0.95',
+            'stroke-width': '3',
+            'mix-blend-mode': 'normal',
+          }
+        );
+        rendition.display(cfi);
+        temporarySearchTimerRef.current = setTimeout(clearTemporarySearchMark, 6500);
+      },
+    }), [chapterForSection, clearTemporarySearchMark]);
 
     // Theme lookup for iframe styles (must be hex/hard values, not CSS variables)
     const themePresets = useMemo(() => ({
@@ -90,7 +285,15 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
       const marginValue =
         settings.margin === 'narrow' ? '5%' : settings.margin === 'wide' ? '25%' : '15%';
 
-      const baseStyles: any = {
+      const baseStyles: ThemeStyles = {
+        '::selection': {
+          background: 'rgba(251, 191, 36, 0.28) !important',
+        },
+        '.epubjs-hl': {
+          fill: 'rgba(251, 191, 36, 0.38) !important',
+          'fill-opacity': '1 !important',
+          'mix-blend-mode': 'multiply',
+        },
         html: {
           'font-size': `${settings.fontSize}% !important`,
         },
@@ -144,6 +347,37 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
       }
     }, [getThemeStyles]);
 
+    useEffect(() => {
+      const rendition = renditionRef.current;
+      if (!rendition || !isRenditionReady) return;
+
+      const nextCfis = new Set(highlights.map((highlight) => highlight.cfi));
+
+      renderedHighlightsRef.current.forEach((cfi) => {
+        if (!nextCfis.has(cfi)) {
+          rendition.annotations.remove(cfi, 'highlight');
+          renderedHighlightsRef.current.delete(cfi);
+        }
+      });
+
+      highlights.forEach((highlight) => {
+        if (renderedHighlightsRef.current.has(highlight.cfi)) return;
+
+        rendition.annotations.highlight(
+          highlight.cfi,
+          { id: highlight.id },
+          () => onHighlightClick?.(highlight),
+          undefined,
+          {
+            fill: 'rgba(251, 191, 36, 0.38)',
+            'fill-opacity': '1',
+            'mix-blend-mode': 'multiply',
+          }
+        );
+        renderedHighlightsRef.current.add(highlight.cfi);
+      });
+    }, [highlights, isRenditionReady, onHighlightClick]);
+
     // Initialize epubjs
     useEffect(() => {
       if (!viewerRef.current || initializedRef.current) return;
@@ -156,7 +390,7 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
 
         try {
           const ePub = await import('epubjs');
-          const book = ePub.default(url);
+          const book = ePub.default(url) as unknown as EpubBook;
           bookRef.current = book;
 
           await book.ready;
@@ -179,20 +413,20 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
           rendition.themes.select('dynamic');
           rendition.themes.fontSize(`${settings.fontSize}%`);
 
-          rendition.on('relocated', (location: any) => {
+          rendition.on('relocated', (location: RenditionLocation) => {
             if (location?.start?.cfi) {
               try {
                 const progress = book.locations?.percentageFromCfi(location.start.cfi) || 0;
                 onRelocated?.(location.start.cfi, progress);
 
                 // Find current chapter with fallback
-                let chapter: any = book.navigation.get(location.start.cfi);
+                let chapter: NavigationEntry | undefined = book.navigation.get(location.start.cfi);
                 
                 // Fallback: search spine/href if exact CFI match fails
                 if (!chapter && book.spine) {
                    const spineItem = book.spine.get(location.start.cfi);
                    if (spineItem) {
-                     chapter = book.navigation.toc.find((item: any) => item.href.includes(spineItem.href));
+                     chapter = book.navigation.toc.find((item: TocEntry) => item.href.includes(spineItem.href));
                    }
                 }
 
@@ -206,8 +440,18 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
             }
           });
 
+          rendition.on('selected', (cfiRange: string, contents: EpubContents) => {
+            book.getRange(cfiRange).then((range: Range | null) => {
+              const text = range?.toString().trim().replace(/\s+/g, ' ');
+              if (text) {
+                onTextSelected?.({ cfi: cfiRange, text });
+              }
+              contents?.window?.getSelection()?.removeAllRanges();
+            });
+          });
+
           // Handle keyboard navigation inside the iframe
-          rendition.on('keydown', (e: any) => {
+          rendition.on('keydown', (e: KeyboardEvent) => {
             if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
               e.preventDefault();
               rendition.next();
@@ -225,6 +469,7 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
           }
 
           book.locations.generate(1600).catch(() => {});
+          setIsRenditionReady(true);
 
           let resizeTimeout: ReturnType<typeof setTimeout>;
           const handleResize = () => {
@@ -254,6 +499,7 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
       init();
 
       return () => {
+        clearTemporarySearchMark();
         cleanupRef.current?.();
         if (renditionRef.current) {
           try { renditionRef.current.destroy(); } catch { /* ignore */ }

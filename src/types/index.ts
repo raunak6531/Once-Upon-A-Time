@@ -21,3 +21,38 @@ export interface ReaderSettings {
   customBg?: string;
   customText?: string;
 }
+
+export interface ReaderPreferences {
+  settings: ReaderSettings;
+  isPinned: boolean;
+}
+
+export interface ReaderBookmark {
+  id: string;
+  cfi: string;
+  label: string;
+  date: string;
+}
+
+export interface ReaderHighlight {
+  id: string;
+  cfi: string;
+  text: string;
+  note: string;
+  chapter: string;
+  date: string;
+}
+
+export interface ReaderSearchResult {
+  id: string;
+  cfi: string;
+  excerpt: string;
+  chapter: string;
+  sectionIndex: number;
+}
+
+export interface TocEntry {
+  href: string;
+  label: string;
+  subitems?: TocEntry[];
+}

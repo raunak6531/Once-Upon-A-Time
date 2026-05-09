@@ -2,12 +2,13 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, ChevronLeft, ChevronRight, Bookmark, List, Share2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Bookmark, Highlighter, List, Search, Share2, StickyNote, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SettingsPopover from './SettingsPopover';
 import { useBookProgress } from '@/hooks/useBookProgress';
+import { useReaderPreferences } from '@/hooks/useReaderPreferences';
 import type { EpubReaderRef } from './EpubReader';
-import type { ReaderSettings } from '@/types';
+import type { ReaderBookmark, ReaderHighlight, ReaderSearchResult, ReaderSettings, TocEntry } from '@/types';
 import { extractPaletteFromImage } from '@/lib/colorExtraction';
 import { OUATLogo } from './OUATLogo';
 import ReaderSidebar from './ReaderSidebar';
@@ -49,28 +50,51 @@ export default function ReaderControls({
   const router = useRouter();
   const readerRef = useRef<EpubReaderRef>(null);
   const { saveCfi } = useBookProgress(bookId, initialCfi);
-  
-  const [settings, setSettings] = useState<ReaderSettings>({
-    theme: 'dark',
-    fontFamily: 'serif',
-    fontSize: 100,
-    lineHeight: 'normal',
-    margin: 'normal',
-    customBg: '#141418',
-    customText: '#e2e8f0',
-  });
+  const { settings, isPinned, setSettings, setIsPinned } = useReaderPreferences(bookId);
 
   const [progress, setProgress] = useState(0);
   const [showControls, setShowControls] = useState(true);
-  const [isPinned, setIsPinned] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<'toc' | 'bookmarks'>('toc');
-  const [toc, setToc] = useState<any[]>([]);
-  const [bookmarks, setBookmarks] = useState<{ id: string; cfi: string; label: string; date: string }[]>([]);
+  const [sidebarTab, setSidebarTab] = useState<'toc' | 'bookmarks' | 'notes' | 'search'>('toc');
+  const [toc, setToc] = useState<TocEntry[]>([]);
+  const [bookmarks, setBookmarks] = useState<ReaderBookmark[]>(() => {
+    if (typeof window === 'undefined') return [];
+
+    const saved = window.localStorage.getItem(`bookmarks_${bookId}`);
+    if (!saved) return [];
+
+    try {
+      return JSON.parse(saved) as ReaderBookmark[];
+    } catch (e) {
+      console.error('Failed to parse bookmarks', e);
+      return [];
+    }
+  });
+  const [highlights, setHighlights] = useState<ReaderHighlight[]>(() => {
+    if (typeof window === 'undefined') return [];
+
+    const saved = window.localStorage.getItem(`highlights_${bookId}`);
+    if (!saved) return [];
+
+    try {
+      return JSON.parse(saved) as ReaderHighlight[];
+    } catch (e) {
+      console.error('Failed to parse highlights', e);
+      return [];
+    }
+  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ReaderSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [pendingHighlight, setPendingHighlight] = useState<{ cfi: string; text: string } | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
   const [currentChapter, setCurrentChapter] = useState('');
   const [currentCfi, setCurrentCfi] = useState<string | null>(initialCfi);
   const [palette, setPalette] = useState<{ accent: string; tint: string } | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const searchRequestRef = useRef(0);
 
   // Auto-hide controls after inactivity
   const resetHideTimer = useCallback(() => {
@@ -83,11 +107,13 @@ export default function ReaderControls({
 
   useEffect(() => {
     if (isPinned) {
-      setShowControls(true);
       return;
     }
 
-    resetHideTimer();
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 4000);
     const handleTouch = () => resetHideTimer();
 
     window.addEventListener('touchstart', handleTouch);
@@ -97,18 +123,6 @@ export default function ReaderControls({
       clearTimeout(hideTimerRef.current);
     };
   }, [resetHideTimer, isPinned]);
-
-  // Load bookmarks from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem(`bookmarks_${bookId}`);
-    if (saved) {
-      try {
-        setBookmarks(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse bookmarks', e);
-      }
-    }
-  }, [bookId]);
 
   // Color extraction from cover
   useEffect(() => {
@@ -122,6 +136,14 @@ export default function ReaderControls({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setSidebarTab('search');
+        setIsSidebarOpen(true);
+        setShowControls(true);
+        return;
+      }
+
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       switch (e.key) {
@@ -197,14 +219,79 @@ export default function ReaderControls({
     });
   }, [bookId]);
 
+  const saveHighlight = useCallback((note: string) => {
+    if (!pendingHighlight) return;
+
+    setHighlights((prev) => {
+      const next = [
+        {
+          id: crypto.randomUUID(),
+          cfi: pendingHighlight.cfi,
+          text: pendingHighlight.text,
+          note: note.trim(),
+          chapter: currentChapter,
+          date: new Date().toISOString(),
+        },
+        ...prev.filter((highlight) => highlight.cfi !== pendingHighlight.cfi),
+      ];
+      localStorage.setItem(`highlights_${bookId}`, JSON.stringify(next));
+      return next;
+    });
+
+    setPendingHighlight(null);
+    setNoteDraft('');
+    setSidebarTab('notes');
+  }, [bookId, currentChapter, pendingHighlight]);
+
+  const removeHighlight = useCallback((id: string) => {
+    setHighlights((prev) => {
+      const next = prev.filter((highlight) => highlight.id !== id);
+      localStorage.setItem(`highlights_${bookId}`, JSON.stringify(next));
+      return next;
+    });
+  }, [bookId]);
+
+  const runSearch = useCallback(async () => {
+    const query = searchQuery.trim();
+    if (query.length < 2) return;
+
+    const requestId = searchRequestRef.current + 1;
+    searchRequestRef.current = requestId;
+    setIsSearching(true);
+    setHasSearched(true);
+    setSearchError(null);
+
+    try {
+      const results = await readerRef.current?.searchBook(query) ?? [];
+      if (searchRequestRef.current === requestId) {
+        setSearchResults(results);
+      }
+    } catch (error) {
+      console.error('Failed to search book:', error);
+      if (searchRequestRef.current === requestId) {
+        setSearchResults([]);
+        setSearchError('Search failed for this book. Try another phrase.');
+      }
+    } finally {
+      if (searchRequestRef.current === requestId) {
+        setIsSearching(false);
+      }
+    }
+  }, [searchQuery]);
+
+  const jumpToSearchResult = useCallback((cfi: string) => {
+    readerRef.current?.showSearchResult(cfi);
+    setIsSidebarOpen(false);
+  }, []);
+
   const jumpTo = useCallback((cfi: string) => {
     readerRef.current?.display(cfi);
     setIsSidebarOpen(false);
   }, []);
 
   const handleSettingsChange = useCallback((newSettings: Partial<ReaderSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
-  }, []);
+    setSettings(newSettings);
+  }, [setSettings]);
 
   // Theme mapping for chrome logic
   const themePresets = useMemo(() => ({
@@ -243,25 +330,35 @@ export default function ReaderControls({
         onClose={() => setIsSidebarOpen(false)}
         toc={toc}
         bookmarks={bookmarks}
+        highlights={highlights}
+        searchQuery={searchQuery}
+        searchResults={searchResults}
+        isSearching={isSearching}
+        hasSearched={hasSearched}
+        searchError={searchError}
         onJump={jumpTo}
         onRemoveBookmark={removeBookmark}
-        currentCfi={currentCfi}
+        onRemoveHighlight={removeHighlight}
+        onSearchQueryChange={(query) => {
+          setSearchQuery(query);
+          if (query.trim().length < 2) {
+            setSearchError(null);
+          }
+        }}
+        onSearchSubmit={runSearch}
+        onSearchResultClick={jumpToSearchResult}
         currentChapter={currentChapter}
         activeTab={sidebarTab}
         setActiveTab={setSidebarTab}
       />
       {/* Tap Zones */}
-      <div className="absolute inset-0 z-10 flex">
+      <div className="absolute inset-0 z-10 pointer-events-none">
         <div 
-          className="w-1/3 h-full cursor-pointer" 
+          className="absolute inset-y-0 left-0 w-16 sm:w-24 cursor-pointer pointer-events-auto" 
           onClick={() => readerRef.current?.prevPage()}
         />
         <div 
-          className="w-1/3 h-full cursor-pointer" 
-          onClick={() => setShowControls(!showControls)}
-        />
-        <div 
-          className="w-1/3 h-full cursor-pointer" 
+          className="absolute inset-y-0 right-0 w-16 sm:w-24 cursor-pointer pointer-events-auto" 
           onClick={() => readerRef.current?.nextPage()}
         />
       </div>
@@ -296,7 +393,11 @@ export default function ReaderControls({
 
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => setIsPinned(!isPinned)}
+            onClick={() => {
+              const nextPinned = !isPinned;
+              setIsPinned(nextPinned);
+              if (nextPinned) setShowControls(true);
+            }}
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 border ${
               isPinned 
                 ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]' 
@@ -325,6 +426,30 @@ export default function ReaderControls({
           >
             <List className="w-5 h-5" />
           </button>
+          <button
+            onClick={() => {
+              setSidebarTab('notes');
+              setIsSidebarOpen(true);
+            }}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 border ${
+              highlights.length > 0
+                ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]'
+                : 'hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border-[var(--theme-border)]'
+            }`}
+            title="Notes"
+          >
+            <StickyNote className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => {
+              setSidebarTab('search');
+              setIsSidebarOpen(true);
+            }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border border-[var(--theme-border)]"
+            title="Search"
+          >
+            <Search className="w-5 h-5" />
+          </button>
           <SettingsPopover
             settings={settings}
             onSettingsChange={handleSettingsChange}
@@ -343,8 +468,69 @@ export default function ReaderControls({
           onRelocated={handleRelocated}
           onTocLoaded={setToc}
           onChapterChange={setCurrentChapter}
+          highlights={highlights}
+          onTextSelected={(selection) => {
+            setPendingHighlight(selection);
+            setNoteDraft('');
+            setShowControls(true);
+          }}
+          onHighlightClick={(highlight) => {
+            setSidebarTab('notes');
+            setIsSidebarOpen(true);
+            readerRef.current?.display(highlight.cfi);
+          }}
         />
       </div>
+
+      {pendingHighlight && (
+        <div className="absolute inset-x-4 bottom-24 z-40 mx-auto max-w-xl rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4 shadow-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--theme-accent)]">
+                <Highlighter className="w-3.5 h-3.5" />
+                New Highlight
+              </div>
+              <blockquote className="mt-3 max-h-24 overflow-y-auto border-l-2 border-[var(--theme-accent)] pl-3 text-sm font-serif leading-relaxed opacity-80">
+                {pendingHighlight.text}
+              </blockquote>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setPendingHighlight(null);
+                setNoteDraft('');
+              }}
+              className="p-1 opacity-50 hover:opacity-100"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <textarea
+            value={noteDraft}
+            onChange={(event) => setNoteDraft(event.target.value)}
+            placeholder="Add a note..."
+            className="mt-4 min-h-20 w-full resize-none rounded-lg border border-[var(--theme-border)] bg-white/5 p-3 text-sm outline-none focus:border-[var(--theme-accent)]"
+          />
+
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => saveHighlight('')}
+              className="rounded-lg border border-[var(--theme-border)] px-3 py-2 text-xs font-bold uppercase tracking-wider opacity-70 transition-opacity hover:opacity-100"
+            >
+              Highlight Only
+            </button>
+            <button
+              type="button"
+              onClick={() => saveHighlight(noteDraft)}
+              className="rounded-lg bg-[var(--theme-accent)] px-3 py-2 text-xs font-bold uppercase tracking-wider text-black"
+            >
+              Save Note
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Scrubber */}
       <div
