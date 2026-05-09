@@ -195,6 +195,7 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
       </div>
 
       <main className="library-main">
+
         <header className="library-hero">
           <div className="hero-eyebrow">
             <Sparkles className="w-3 h-3" />
@@ -286,6 +287,11 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
           </div>
         </header>
 
+        <ContinueReadingHero 
+          books={libraryBooks} 
+          onOpen={open} 
+        />
+
         {libraryBooks.length === 0 ? (
           <EmptyState onUploadClick={onUploadClick} />
         ) : filtered.length === 0 ? (
@@ -308,6 +314,70 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
         )}
       </main>
     </div>
+  );
+}
+
+function ContinueReadingHero({ books, onOpen }: { books: Book[]; onOpen: (id: string) => void }) {
+  const currentBook = useMemo(() => {
+    return [...books]
+      .filter(b => statusFor(b) === 'reading')
+      .sort((a, b) => {
+        const timeA = new Date(a.last_read_at || a.updated_at || a.created_at).getTime();
+        const timeB = new Date(b.last_read_at || b.updated_at || b.created_at).getTime();
+        return timeB - timeA;
+      })[0];
+  }, [books]);
+
+  if (!currentBook) return null;
+
+  const progress = Math.round(Number(currentBook.progress_percent || 0));
+
+  return (
+    <section className="continue-reading-hero animate-fade-in">
+      <div className="continue-reading-cover">
+        {currentBook.cover_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={currentBook.cover_url} alt="" />
+        ) : (
+          <div className="sleek-book-placeholder">
+            <BookOpen className="w-8 h-8" />
+          </div>
+        )}
+      </div>
+      <div className="continue-reading-info">
+        <div className="continue-reading-label">
+          <Sparkles className="w-3 h-3" />
+          Continue Reading
+        </div>
+        <h2 className="continue-reading-title">{currentBook.title}</h2>
+        <p className="continue-reading-author">by {currentBook.author || 'Unknown Author'}</p>
+        
+        <div className="continue-reading-progress">
+          <div className="continue-reading-progress-text">
+            <span>{progress}% Completed</span>
+            <span style={{ color: 'rgba(255,255,255,0.4)' }}>
+              Last read {currentBook.last_read_at ? new Date(currentBook.last_read_at).toLocaleDateString() : 'recently'}
+            </span>
+          </div>
+          <div className="continue-reading-progress-bar">
+            <div 
+              className="continue-reading-progress-fill" 
+              style={{ width: `${progress}%` }} 
+            />
+          </div>
+        </div>
+
+        <div className="continue-reading-actions">
+          <button 
+            onClick={() => onOpen(currentBook.id)}
+            className="btn-3d btn-3d-amber"
+            style={{ padding: '0.85rem 2.5rem' }}
+          >
+            <BookOpen className="w-4 h-4" /> Resume Story
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -401,9 +471,6 @@ function SleekBookCard({ book, index, onHover, onOpen, onUpdate }: CardProps) {
           </button>
         </div>
         {book.author && <p className="sleek-book-author">{book.author}</p>}
-        <div className="book-progress-track" aria-label={`${progress}% complete`}>
-          <span style={{ width: `${progress}%` }} />
-        </div>
         <div className="book-card-controls">
           <div className="status-picker">
             <button

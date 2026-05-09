@@ -14,6 +14,13 @@ import { extractPaletteFromImage } from '@/lib/colorExtraction';
 import { OUATLogo } from './OUATLogo';
 import ReaderSidebar from './ReaderSidebar';
 import { Pin, PinOff } from 'lucide-react';
+import { 
+  fetchAnnotations, 
+  saveBookmark as cloudSaveBookmark, 
+  deleteBookmark as cloudDeleteBookmark,
+  saveHighlight as cloudSaveHighlight,
+  deleteHighlight as cloudDeleteHighlight
+} from '@/lib/annotations';
 
 // Dynamically import EpubReader with SSR disabled
 const EpubReaderComponent = dynamic(() => import('./EpubReader'), {
@@ -63,32 +70,9 @@ export default function ReaderControls({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'toc' | 'bookmarks' | 'notes' | 'search'>('toc');
   const [toc, setToc] = useState<TocEntry[]>([]);
-  const [bookmarks, setBookmarks] = useState<ReaderBookmark[]>(() => {
-    if (typeof window === 'undefined') return [];
-
-    const saved = window.localStorage.getItem(`bookmarks_${bookId}`);
-    if (!saved) return [];
-
-    try {
-      return JSON.parse(saved) as ReaderBookmark[];
-    } catch (e) {
-      console.error('Failed to parse bookmarks', e);
-      return [];
-    }
-  });
-  const [highlights, setHighlights] = useState<ReaderHighlight[]>(() => {
-    if (typeof window === 'undefined') return [];
-
-    const saved = window.localStorage.getItem(`highlights_${bookId}`);
-    if (!saved) return [];
-
-    try {
-      return JSON.parse(saved) as ReaderHighlight[];
-    } catch (e) {
-      console.error('Failed to parse highlights', e);
-      return [];
-    }
-  });
+  const [bookmarks, setBookmarks] = useState<ReaderBookmark[]>([]);
+  const [highlights, setHighlights] = useState<ReaderHighlight[]>([]);
+  const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ReaderSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -139,6 +123,22 @@ export default function ReaderControls({
       });
     }
   }, [coverUrl]);
+
+  // Load cloud annotations
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await fetchAnnotations(bookId);
+        setBookmarks(data.bookmarks);
+        setHighlights(data.highlights);
+      } catch (err) {
+        console.error('Failed to load cloud annotations:', err);
+      } finally {
+        setIsLoadingAnnotations(false);
+      }
+    }
+    load();
+  }, [bookId]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -199,66 +199,95 @@ export default function ReaderControls({
     [recordActivity, saveCfi]
   );
 
-  const toggleBookmark = useCallback(() => {
+  const toggleBookmark = useCallback(async () => {
     if (!currentCfi) return;
     
-    setBookmarks(prev => {
-      const exists = prev.find(b => b.cfi === currentCfi);
-      let next;
-      if (exists) {
-        next = prev.filter(b => b.cfi !== currentCfi);
-      } else {
-        next = [...prev, {
-          id: Math.random().toString(36).substr(2, 9),
-          cfi: currentCfi,
-          label: currentChapter || `Page at ${progress}%`,
-          date: new Date().toISOString()
-        }];
+    const existing = bookmarks.find(b => b.cfi === currentCfi);
+    if (existing) {
+      setBookmarks(prev => prev.filter(b => b.cfi !== currentCfi));
+      try {
+        await cloudDeleteBookmark(existing.id);
+      } catch (err) {
+        console.error('Failed to delete bookmark:', err);
       }
-      localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(next));
-      return next;
-    });
-  }, [currentCfi, currentChapter, progress, bookId]);
+    } else {
+      const tempId = crypto.randomUUID();
+      const label = currentChapter || `Page at ${progress}%`;
+      const tempBookmark: ReaderBookmark = {
+        id: tempId,
+        cfi: currentCfi,
+        label,
+        date: new Date().toISOString()
+      };
+      
+      setBookmarks(prev => [...prev, tempBookmark]);
+      
+      try {
+        const saved = await cloudSaveBookmark(bookId, { cfi: currentCfi, label });
+        setBookmarks(prev => prev.map(b => b.id === tempId ? saved : b));
+      } catch (err) {
+        console.error('Failed to save bookmark:', err);
+        setBookmarks(prev => prev.filter(b => b.id !== tempId));
+      }
+    }
+  }, [currentCfi, currentChapter, progress, bookId, bookmarks]);
 
-  const removeBookmark = useCallback((cfi: string) => {
-    setBookmarks(prev => {
-      const next = prev.filter(b => b.cfi !== cfi);
-      localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(next));
-      return next;
-    });
-  }, [bookId]);
+  const removeBookmark = useCallback(async (cfi: string) => {
+    const existing = bookmarks.find(b => b.cfi === cfi);
+    if (!existing) return;
 
-  const saveHighlight = useCallback((note: string) => {
+    setBookmarks(prev => prev.filter(b => b.cfi !== cfi));
+    try {
+      await cloudDeleteBookmark(existing.id);
+    } catch (err) {
+      console.error('Failed to remove bookmark:', err);
+    }
+  }, [bookmarks]);
+
+  const saveHighlight = useCallback(async (note: string) => {
     if (!pendingHighlight) return;
 
-    setHighlights((prev) => {
-      const next = [
-        {
-          id: crypto.randomUUID(),
-          cfi: pendingHighlight.cfi,
-          text: pendingHighlight.text,
-          note: note.trim(),
-          chapter: currentChapter,
-          date: new Date().toISOString(),
-        },
-        ...prev.filter((highlight) => highlight.cfi !== pendingHighlight.cfi),
-      ];
-      localStorage.setItem(`highlights_${bookId}`, JSON.stringify(next));
-      return next;
-    });
+    const tempId = crypto.randomUUID();
+    const tempHighlight: ReaderHighlight = {
+      id: tempId,
+      cfi: pendingHighlight.cfi,
+      text: pendingHighlight.text,
+      note: note.trim(),
+      chapter: currentChapter,
+      date: new Date().toISOString(),
+    };
+
+    setHighlights((prev) => [
+      tempHighlight,
+      ...prev.filter((highlight) => highlight.cfi !== pendingHighlight.cfi),
+    ]);
 
     setPendingHighlight(null);
     setNoteDraft('');
     setSidebarTab('notes');
+
+    try {
+      const saved = await cloudSaveHighlight(bookId, {
+        cfi: pendingHighlight.cfi,
+        text: pendingHighlight.text,
+        note: note.trim(),
+        chapter: currentChapter
+      });
+      setHighlights(prev => prev.map(h => h.id === tempId ? saved : h));
+    } catch (err) {
+      console.error('Failed to save cloud highlight:', err);
+      // Optional: Revert UI or show error
+    }
   }, [bookId, currentChapter, pendingHighlight]);
 
-  const removeHighlight = useCallback((id: string) => {
-    setHighlights((prev) => {
-      const next = prev.filter((highlight) => highlight.id !== id);
-      localStorage.setItem(`highlights_${bookId}`, JSON.stringify(next));
-      return next;
-    });
-  }, [bookId]);
+  const removeHighlight = useCallback(async (id: string) => {
+    setHighlights((prev) => prev.filter((highlight) => highlight.id !== id));
+    try {
+      await cloudDeleteHighlight(id);
+    } catch (err) {
+      console.error('Failed to remove highlight:', err);
+    }
+  }, []);
 
   const runSearch = useCallback(async () => {
     const query = searchQuery.trim();

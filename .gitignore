@@ -40,3 +40,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 supabase/migrations/202605100001_library_organization_stats.sql
+supabase/migrations/202605100002_annotations_sync.sql
