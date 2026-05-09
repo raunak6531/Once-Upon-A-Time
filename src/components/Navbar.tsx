@@ -1,8 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { BookOpen, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { OUATLogo } from './OUATLogo';
 
 export default function Navbar() {
   const router = useRouter();
@@ -23,15 +24,8 @@ export default function Navbar() {
         borderBottom: '1px solid var(--theme-border)',
       }}
     >
-      <div className="flex items-center gap-3">
-        <div
-          className="flex items-center justify-center w-9 h-9 rounded-xl"
-          style={{
-            background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-          }}
-        >
-          <BookOpen className="w-5 h-5 text-white" />
-        </div>
+      <div className="flex items-center gap-2">
+        <OUATLogo size={32} />
         <h1
           className="text-lg font-bold"
           style={{ fontFamily: 'var(--font-serif)', color: 'var(--theme-text)' }}
