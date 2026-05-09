@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import type { Book } from '@/types';
+import type { Book, ReadingSession } from '@/types';
 import LibraryView from '@/components/LibraryView';
 
 export const metadata = {
@@ -22,9 +22,20 @@ export default async function LibraryPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
+  const { data: sessions, error: sessionsError } = await supabase
+    .from('reading_sessions')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('started_at', { ascending: false })
+    .limit(180);
+
   if (error) {
     console.error('Failed to fetch books:', error);
   }
 
-  return <LibraryView books={(books as Book[]) || []} />;
+  if (sessionsError) {
+    console.error('Failed to fetch reading sessions:', sessionsError);
+  }
+
+  return <LibraryView books={(books as Book[]) || []} sessions={(sessions as ReadingSession[]) || []} />;
 }

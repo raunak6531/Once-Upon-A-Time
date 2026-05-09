@@ -53,6 +53,8 @@ export default async function ReadPage({ params }: ReadPageProps) {
         epubUrl={typedBook.epub_file_url}
         initialCfi={typedBook.current_cfi}
         coverUrl={typedBook.cover_url}
+        initialProgressPercent={typedBook.progress_percent}
+        initialTotalReadingSeconds={typedBook.total_reading_seconds}
       />
     </div>
   );

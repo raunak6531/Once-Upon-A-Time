@@ -2,16 +2,17 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Book } from '@/types';
+import type { Book, ReadingSession } from '@/types';
 import Navbar from './Navbar';
 import UploadModal from './UploadModal';
 import BookshelfLibrary from './BookshelfLibrary';
 
 interface LibraryViewProps {
   books: Book[];
+  sessions: ReadingSession[];
 }
 
-export default function LibraryView({ books }: LibraryViewProps) {
+export default function LibraryView({ books, sessions }: LibraryViewProps) {
   const [showUpload, setShowUpload] = useState(false);
   const router = useRouter();
 
@@ -25,7 +26,9 @@ export default function LibraryView({ books }: LibraryViewProps) {
       </div>
 
       <BookshelfLibrary
+        key={books.map((book) => `${book.id}:${book.updated_at || book.last_read_at || book.created_at}`).join('|')}
         books={books}
+        sessions={sessions}
         onUploadClick={() => setShowUpload(true)}
       />
 

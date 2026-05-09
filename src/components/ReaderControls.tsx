@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import SettingsPopover from './SettingsPopover';
 import { useBookProgress } from '@/hooks/useBookProgress';
 import { useReaderPreferences } from '@/hooks/useReaderPreferences';
+import { useReadingSession } from '@/hooks/useReadingSession';
 import type { EpubReaderRef } from './EpubReader';
 import type { ReaderBookmark, ReaderHighlight, ReaderSearchResult, ReaderSettings, TocEntry } from '@/types';
 import { extractPaletteFromImage } from '@/lib/colorExtraction';
@@ -38,6 +39,8 @@ interface ReaderControlsProps {
   epubUrl: string;
   initialCfi: string | null;
   coverUrl?: string | null;
+  initialProgressPercent?: number | null;
+  initialTotalReadingSeconds?: number | null;
 }
 
 export default function ReaderControls({
@@ -46,13 +49,16 @@ export default function ReaderControls({
   epubUrl,
   initialCfi,
   coverUrl,
+  initialProgressPercent,
+  initialTotalReadingSeconds,
 }: ReaderControlsProps) {
   const router = useRouter();
   const readerRef = useRef<EpubReaderRef>(null);
   const { saveCfi } = useBookProgress(bookId, initialCfi);
   const { settings, isPinned, setSettings, setIsPinned } = useReaderPreferences(bookId);
 
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState(Math.round(initialProgressPercent || 0));
+  const [isReaderReady, setIsReaderReady] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'toc' | 'bookmarks' | 'notes' | 'search'>('toc');
@@ -95,6 +101,7 @@ export default function ReaderControls({
   const [palette, setPalette] = useState<{ accent: string; tint: string } | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const searchRequestRef = useRef(0);
+  const { recordActivity } = useReadingSession(bookId, progress, isReaderReady);
 
   // Auto-hide controls after inactivity
   const resetHideTimer = useCallback(() => {
@@ -183,11 +190,13 @@ export default function ReaderControls({
 
   const handleRelocated = useCallback(
     (cfi: string, progressPercent: number) => {
-      saveCfi(cfi);
-      setProgress(Math.round(progressPercent * 100));
+      const nextProgress = Math.round(progressPercent * 100);
+      saveCfi(cfi, nextProgress);
+      setProgress(nextProgress);
       setCurrentCfi(cfi);
+      recordActivity();
     },
-    [saveCfi]
+    [recordActivity, saveCfi]
   );
 
   const toggleBookmark = useCallback(() => {
@@ -282,12 +291,14 @@ export default function ReaderControls({
   const jumpToSearchResult = useCallback((cfi: string) => {
     readerRef.current?.showSearchResult(cfi);
     setIsSidebarOpen(false);
-  }, []);
+    recordActivity();
+  }, [recordActivity]);
 
   const jumpTo = useCallback((cfi: string) => {
     readerRef.current?.display(cfi);
     setIsSidebarOpen(false);
-  }, []);
+    recordActivity();
+  }, [recordActivity]);
 
   const handleSettingsChange = useCallback((newSettings: Partial<ReaderSettings>) => {
     setSettings(newSettings);
@@ -315,6 +326,16 @@ export default function ReaderControls({
       '--theme-accent-tint': 'rgba(251, 191, 36, 0.1)',
     } as React.CSSProperties;
   }, [settings.theme, settings.customBg, settings.customText, themePresets]);
+
+  const estimatedMinutesLeft = useMemo(() => {
+    const totalSeconds = Number(initialTotalReadingSeconds || 0);
+    if (progress > 5 && progress < 100 && totalSeconds > 120) {
+      const secondsPerPercent = totalSeconds / progress;
+      return Math.max(1, Math.round(((100 - progress) * secondsPerPercent) / 60));
+    }
+
+    return Math.max(1, Math.round((100 - progress) / 5));
+  }, [initialTotalReadingSeconds, progress]);
 
   return (
     <div
@@ -355,11 +376,17 @@ export default function ReaderControls({
       <div className="absolute inset-0 z-10 pointer-events-none">
         <div 
           className="absolute inset-y-0 left-0 w-16 sm:w-24 cursor-pointer pointer-events-auto" 
-          onClick={() => readerRef.current?.prevPage()}
+          onClick={() => {
+            recordActivity();
+            readerRef.current?.prevPage();
+          }}
         />
         <div 
           className="absolute inset-y-0 right-0 w-16 sm:w-24 cursor-pointer pointer-events-auto" 
-          onClick={() => readerRef.current?.nextPage()}
+          onClick={() => {
+            recordActivity();
+            readerRef.current?.nextPage();
+          }}
         />
       </div>
 
@@ -466,6 +493,7 @@ export default function ReaderControls({
           initialCfi={initialCfi}
           settings={settings}
           onRelocated={handleRelocated}
+          onReady={() => setIsReaderReady(true)}
           onTocLoaded={setToc}
           onChapterChange={setCurrentChapter}
           highlights={highlights}
@@ -547,7 +575,7 @@ export default function ReaderControls({
             <div className="flex gap-4">
               <span>Chapter Progression</span>
               <span className="opacity-40">•</span>
-              <span className="text-[var(--theme-accent)]">~{Math.max(1, Math.round((100 - progress) / 5))} mins left</span>
+              <span className="text-[var(--theme-accent)]">~{estimatedMinutesLeft} mins left</span>
             </div>
             <span className="text-[var(--theme-accent)]">{progress}%</span>
           </div>
@@ -557,6 +585,7 @@ export default function ReaderControls({
               const rect = e.currentTarget.getBoundingClientRect();
               const x = e.clientX - rect.left;
               const percent = x / rect.width;
+              recordActivity();
               readerRef.current?.goToPercentage(percent);
             }}
           >
@@ -568,7 +597,10 @@ export default function ReaderControls({
           
           <div className="flex justify-center items-center gap-8 pt-2">
              <button 
-              onClick={() => readerRef.current?.prevPage()}
+              onClick={() => {
+                recordActivity();
+                readerRef.current?.prevPage();
+              }}
               className="p-2 text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)] transition-colors"
              >
                <ChevronLeft className="w-6 h-6" />
@@ -577,7 +609,10 @@ export default function ReaderControls({
                <Share2 className="w-5 h-5" />
              </button>
              <button 
-              onClick={() => readerRef.current?.nextPage()}
+              onClick={() => {
+                recordActivity();
+                readerRef.current?.nextPage();
+              }}
               className="p-2 text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)] transition-colors"
              >
                <ChevronRight className="w-6 h-6" />
