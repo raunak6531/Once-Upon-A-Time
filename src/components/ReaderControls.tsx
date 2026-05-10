@@ -21,6 +21,8 @@ import {
   saveHighlight as cloudSaveHighlight,
   deleteHighlight as cloudDeleteHighlight
 } from '@/lib/annotations';
+import { fetchDefinition, type DictionaryDefinition } from '@/lib/dictionary';
+import { Book as BookIcon, Loader2, Volume2 } from 'lucide-react';
 
 // Dynamically import EpubReader with SSR disabled
 const EpubReaderComponent = dynamic(() => import('./EpubReader'), {
@@ -83,6 +85,9 @@ export default function ReaderControls({
   const [currentChapter, setCurrentChapter] = useState('');
   const [currentCfi, setCurrentCfi] = useState<string | null>(initialCfi);
   const [palette, setPalette] = useState<{ accent: string; tint: string } | null>(null);
+  const [dictionaryData, setDictionaryData] = useState<DictionaryDefinition | null>(null);
+  const [isDictLoading, setIsDictLoading] = useState(false);
+  const [dictError, setDictError] = useState<string | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const searchRequestRef = useRef(0);
   const { recordActivity } = useReadingSession(bookId, progress, isReaderReady);
@@ -322,12 +327,33 @@ export default function ReaderControls({
     setIsSidebarOpen(false);
     recordActivity();
   }, [recordActivity]);
-
   const jumpTo = useCallback((cfi: string) => {
     readerRef.current?.display(cfi);
     setIsSidebarOpen(false);
     recordActivity();
   }, [recordActivity]);
+
+  const handleDictionary = useCallback(async () => {
+    if (!pendingHighlight) return;
+    
+    setIsDictLoading(true);
+    setDictionaryData(null);
+    setDictError(null);
+    
+    try {
+      const data = await fetchDefinition(pendingHighlight.text);
+      if (data) {
+        setDictionaryData(data);
+      } else {
+        setDictError("Definition not found for this selection.");
+      }
+    } catch (error) {
+      console.error('Dictionary Error:', error);
+      setDictError("Failed to fetch definition. Please try again.");
+    } finally {
+      setIsDictLoading(false);
+    }
+  }, [pendingHighlight]);
 
   const handleSettingsChange = useCallback((newSettings: Partial<ReaderSettings>) => {
     setSettings(newSettings);
@@ -570,17 +596,103 @@ export default function ReaderControls({
             className="mt-4 min-h-20 w-full resize-none rounded-lg border border-[var(--theme-border)] bg-white/5 p-3 text-sm outline-none focus:border-[var(--theme-accent)]"
           />
 
-          <div className="mt-3 flex justify-end gap-2">
+          <div className="mt-4 flex flex-wrap gap-2 pt-4 border-t border-[var(--theme-border)]">
+            <button
+              onClick={handleDictionary}
+              disabled={isDictLoading}
+              className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs font-bold uppercase tracking-wider text-amber-400 hover:bg-amber-500/20 transition-all disabled:opacity-50"
+            >
+              {isDictLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookIcon className="w-3.5 h-3.5" />}
+              Dictionary Lookup
+            </button>
+          </div>
+
+          {(isDictLoading || dictionaryData || dictError) && (
+            <div className="mt-4 rounded-lg bg-black/20 p-4 border border-[var(--theme-border)] animate-fade-in">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--theme-accent)]">
+                  {isDictLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <BookIcon className="w-3 h-3" />}
+                  Dictionary
+                </div>
+                {(dictionaryData || dictError) && (
+                  <button 
+                    onClick={() => {
+                      setDictionaryData(null);
+                      setDictError(null);
+                    }}
+                    className="p-1 opacity-50 hover:opacity-100"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {dictionaryData ? (
+                <div className="space-y-3">
+                  <div className="flex items-baseline gap-3">
+                    <h4 className="text-lg font-serif font-bold text-[var(--theme-text)]">{dictionaryData.word}</h4>
+                    {dictionaryData.phonetic && (
+                      <span className="text-xs text-amber-500/60 font-mono italic">{dictionaryData.phonetic}</span>
+                    )}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                    {dictionaryData.meanings.map((meaning, idx) => (
+                      <div key={idx} className="space-y-1.5">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-white/30 border-b border-white/5 pb-1 flex items-center gap-2">
+                          {meaning.partOfSpeech}
+                        </div>
+                        <div className="space-y-3 pl-1">
+                          {meaning.definitions.slice(0, 2).map((def, dIdx) => (
+                            <div key={dIdx} className="space-y-1">
+                              <p className="text-sm leading-relaxed text-[var(--theme-text)] opacity-90">
+                                {def.definition}
+                              </p>
+                              {def.example && (
+                                <p className="text-xs italic text-[var(--theme-text)] opacity-40 pl-3 border-l border-white/10">
+                                  &quot;{def.example}&quot;
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm leading-relaxed text-[var(--theme-text)] opacity-90">
+                  {isDictLoading ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="h-4 w-3/4 bg-white/5 rounded animate-pulse" />
+                      <div className="h-4 w-1/2 bg-white/5 rounded animate-pulse" />
+                    </div>
+                  ) : (
+                    <div className="text-red-400/80">{dictError}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 flex justify-end gap-2 pt-4 border-t border-[var(--theme-border)]">
             <button
               type="button"
-              onClick={() => saveHighlight('')}
+              onClick={() => {
+                saveHighlight('');
+                setDictionaryData(null);
+                setDictError(null);
+              }}
               className="rounded-lg border border-[var(--theme-border)] px-3 py-2 text-xs font-bold uppercase tracking-wider opacity-70 transition-opacity hover:opacity-100"
             >
               Highlight Only
             </button>
             <button
               type="button"
-              onClick={() => saveHighlight(noteDraft)}
+              onClick={() => {
+                saveHighlight(noteDraft);
+                setDictionaryData(null);
+                setDictError(null);
+              }}
               className="rounded-lg bg-[var(--theme-accent)] px-3 py-2 text-xs font-bold uppercase tracking-wider text-black"
             >
               Save Note
