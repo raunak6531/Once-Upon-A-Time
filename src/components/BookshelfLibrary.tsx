@@ -97,6 +97,7 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [activeCover, setActiveCover] = useState<string | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(false);
 
 
   const stats = useMemo(() => {
@@ -210,30 +211,37 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
             <span className="hero-rule-line" />
           </div>
 
-          <div className="library-stat-strip">
-            <StatItem icon={Library} label="Volumes" value={stats.total.toString()} />
-            <StatItem icon={BookOpen} label="Reading" value={stats.reading.toString()} />
-            <StatItem icon={CheckCircle2} label="Finished" value={stats.finished.toString()} />
-            <StatItem icon={Timer} label="Time read" value={formatDuration(stats.totalSeconds)} />
-            <StatItem icon={Flame} label="Streak" value={`${stats.streak}d`} />
+          <div className="library-stat-inline">
+            <StatInlineItem icon={Library} value={stats.total.toString()} label="Volumes" />
+            <StatInlineItem icon={BookOpen} value={stats.reading.toString()} label="Reading" />
+            <StatInlineItem icon={CheckCircle2} value={stats.finished.toString()} label="Finished" />
+            <StatInlineItem icon={Timer} value={formatDuration(stats.totalSeconds)} label="Time Read" />
+            <StatInlineItem icon={Flame} value={`${stats.streak}d`} label="Streak" />
+            
+            <button 
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              className={`heatmap-toggle-btn${showHeatmap ? ' is-active' : ''}`}
+            >
+              <Timer className="w-3.5 h-3.5" />
+              {showHeatmap ? 'Hide Insights' : 'Show Insights'}
+            </button>
           </div>
 
-          <div className="hero-meta">
+          {showHeatmap && <ReadingHeatmap sessions={sessions} />}
+
+          <div className="hero-meta-row">
             <span className="hero-meta-item">
-              <Library className="w-3.5 h-3.5" />
               <strong>{libraryBooks.length}</strong> {libraryBooks.length === 1 ? 'volume' : 'volumes'}
             </span>
             <span className="hero-meta-sep">·</span>
             <span className="hero-meta-item">
-              <BookOpen className="w-3.5 h-3.5" />
-              <strong>{stats.reading}</strong> in progress
+              <strong>{stats.reading}</strong> reading
             </span>
             {lastAdded && (
               <>
                 <span className="hero-meta-sep">·</span>
                 <span className="hero-meta-item hero-meta-muted">
-                  <Clock className="w-3.5 h-3.5" />
-                  Last added <em>{lastAdded.title.length > 24 ? lastAdded.title.slice(0, 24) + '...' : lastAdded.title}</em>
+                  Newest: <em>{lastAdded.title.length > 20 ? lastAdded.title.slice(0, 20) + '...' : lastAdded.title}</em>
                 </span>
               </>
             )}
@@ -378,6 +386,98 @@ function ContinueReadingHero({ books, onOpen }: { books: Book[]; onOpen: (id: st
         </div>
       </div>
     </section>
+  );
+}
+
+function ReadingHeatmap({ sessions }: { sessions: ReadingSession[] }) {
+  const heatmapData = useMemo(() => {
+    const data: Record<string, number> = {};
+    sessions.forEach(session => {
+      const key = localDateKey(session.started_at);
+      data[key] = (data[key] || 0) + session.duration_seconds;
+    });
+    return data;
+  }, [sessions]);
+
+  const cells = useMemo(() => {
+    const result = [];
+    const today = new Date();
+    // Show last 6 months (approx 26 weeks)
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 6);
+    // Align to start of week (Sunday)
+    startDate.setDate(startDate.getDate() - startDate.getDay());
+
+    for (let i = 0; i < 26 * 7; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      const key = localDateKey(date);
+      const seconds = heatmapData[key] || 0;
+      
+      // Levels 0-4
+      let level = 0;
+      if (seconds > 0) {
+        if (seconds < 600) level = 1; // < 10m
+        else if (seconds < 1800) level = 2; // < 30m
+        else if (seconds < 3600) level = 3; // < 1h
+        else level = 4;
+      }
+
+      result.push({
+        date,
+        level,
+        seconds,
+        isFuture: date > today
+      });
+    }
+    return result;
+  }, [heatmapData]);
+
+  return (
+    <div className="heatmap-container animate-fade-in" style={{ animationDelay: '0.4s' }}>
+      <div className="heatmap-header">
+        <h3 className="heatmap-title">Reading Consistency</h3>
+        <div className="heatmap-legend">
+          <span>Less</span>
+          <div className="heatmap-legend-box" style={{ background: 'rgba(255,255,255,0.05)' }} />
+          <div className="heatmap-legend-box" data-level="1" />
+          <div className="heatmap-legend-box" data-level="2" />
+          <div className="heatmap-legend-box" data-level="3" />
+          <div className="heatmap-legend-box" data-level="4" />
+          <span>More</span>
+        </div>
+      </div>
+      <div className="heatmap-grid-wrapper">
+        <div className="heatmap-grid">
+          {cells.map((cell, i) => (
+            <div 
+              key={i}
+              className="heatmap-cell"
+              data-level={cell.isFuture ? 0 : cell.level}
+              style={cell.isFuture ? { opacity: 0.2, cursor: 'default' } : undefined}
+            >
+              {!cell.isFuture && (
+                <div className="heatmap-tooltip">
+                  <strong>{cell.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</strong>
+                  <br />
+                  {cell.seconds > 0 ? formatDuration(cell.seconds) : 'No activity'}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatInlineItem({ icon: Icon, value, label }: { icon: any; value: string; label: string }) {
+  return (
+    <div className="stat-inline-item">
+      <Icon className="w-3.5 h-3.5" />
+      <span className="stat-value">{value}</span>
+      <span className="stat-label">{label}</span>
+    </div>
   );
 }
 

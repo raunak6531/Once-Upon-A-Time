@@ -416,11 +416,18 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
           rendition.on('relocated', (location: RenditionLocation) => {
             if (location?.start?.cfi) {
               try {
-                const progress = book.locations?.percentageFromCfi(location.start.cfi) || 0;
-                onRelocated?.(location.start.cfi, progress);
+                  const locations = book.locations;
+                  let progress = 0;
+                  if (locations && typeof locations.percentageFromCfi === 'function') {
+                    const p = locations.percentageFromCfi(location.start.cfi);
+                    // epubjs returns -1 or 0 if locations aren't ready
+                    progress = p >= 0 ? p : 0;
+                  }
+                  
+                  onRelocated?.(location.start.cfi, progress);
 
-                // Find current chapter with fallback
-                let chapter: NavigationEntry | undefined = book.navigation.get(location.start.cfi);
+                  // Find current chapter with fallback
+                  let chapter: NavigationEntry | undefined = book.navigation.get(location.start.cfi);
                 
                 // Fallback: search spine/href if exact CFI match fails
                 if (!chapter && book.spine) {

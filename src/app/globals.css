@@ -623,9 +623,12 @@ input:-webkit-autofill:focus {
    ============================================= */
 .library-page {
   position: relative;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   overflow-x: hidden;
   background: linear-gradient(135deg, #0c0a1a 0%, #1a1035 30%, #12101f 60%, #0a0a14 100%);
+  scroll-behavior: smooth;
 }
 
 .library-bg {
@@ -735,10 +738,11 @@ input:-webkit-autofill:focus {
 .hero-subtitle {
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: 1.05rem;
-  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.45);
   margin: 0;
   letter-spacing: 0.005em;
+  opacity: 0.8;
 }
 
 /* Decorative gold rule with center diamond */
@@ -769,34 +773,24 @@ input:-webkit-autofill:focus {
 }
 
 /* Inline meta row */
-.hero-meta {
+.hero-meta-row {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  flex-wrap: wrap;
+  gap: 0.5rem;
   justify-content: center;
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.65);
-  margin-bottom: 2.25rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 2rem;
+  letter-spacing: 0.02em;
 }
-.hero-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  letter-spacing: 0.01em;
-}
-.hero-meta-item svg { color: rgba(251, 191, 36, 0.55); }
-.hero-meta-item strong { color: #fbbf24; font-weight: 600; }
-.hero-meta-item em {
-  font-style: italic;
-  color: rgba(255, 255, 255, 0.78);
-  font-family: var(--font-serif);
-}
-.hero-meta-muted { color: rgba(255, 255, 255, 0.45); }
-.hero-meta-muted svg { color: rgba(255, 255, 255, 0.35); }
-.hero-meta-sep {
-  color: rgba(251, 191, 36, 0.35);
+
+.hero-meta-row strong {
+  color: rgba(251, 191, 36, 0.8);
   font-weight: 700;
+}
+
+.hero-meta-sep {
+  opacity: 0.2;
 }
 
 /* Toolbar row: search / sort / cta */
@@ -867,46 +861,62 @@ input:-webkit-autofill:focus {
   text-transform: uppercase;
 }
 
-.library-stat-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.6rem;
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto 1.75rem;
-}
-.library-stat-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-width: 0;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid rgba(251, 191, 36, 0.12);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.7);
-}
-.library-stat-item svg {
-  color: rgba(251, 191, 36, 0.62);
-  flex-shrink: 0;
-}
-.library-stat-item span {
+.library-stat-inline {
   display: flex;
-  flex-direction: column;
-  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
 }
-.library-stat-item strong {
+
+.stat-inline-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.stat-inline-item svg {
+  color: rgba(251, 191, 36, 0.6);
+}
+
+.stat-value {
+  font-weight: 800;
   color: white;
-  font-size: 0.95rem;
-  line-height: 1;
+  font-size: 0.9rem;
 }
-.library-stat-item em {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 0.62rem;
-  font-style: normal;
+
+.stat-label {
+  font-size: 0.65rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+}
+
+.heatmap-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.heatmap-toggle-btn:hover {
+  background: rgba(251, 191, 36, 0.15);
+  transform: translateY(-1px);
+}
+
+.heatmap-toggle-btn.is-active {
+  background: #fbbf24;
+  color: #0c0a1a;
 }
 
 .library-filter-panel {
@@ -1544,6 +1554,105 @@ input:-webkit-autofill:focus {
   padding: 0.8rem 2rem !important;
   font-size: 0.85rem !important;
   letter-spacing: 0.08em;
+}
+
+/* =============================================
+   Reading Activity Heatmap
+   ============================================= */
+.heatmap-container {
+  margin-top: 3rem;
+  padding: 1.5rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  max-width: 52rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.heatmap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0 0.5rem;
+}
+
+.heatmap-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.heatmap-legend-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.heatmap-grid-wrapper {
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(26, 1fr);
+  grid-template-rows: repeat(7, 1fr);
+  gap: 4px;
+  min-width: 500px;
+}
+
+.heatmap-cell {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: transform 0.2s ease, background 0.3s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.2);
+  z-index: 10;
+}
+
+.heatmap-cell[data-level="1"] { background: rgba(251, 191, 36, 0.2); }
+.heatmap-cell[data-level="2"] { background: rgba(251, 191, 36, 0.4); }
+.heatmap-cell[data-level="3"] { background: rgba(251, 191, 36, 0.7); }
+.heatmap-cell[data-level="4"] { background: rgba(251, 191, 36, 1); box-shadow: 0 0 10px rgba(251, 191, 36, 0.3); }
+
+.heatmap-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: #1e1b30;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 20;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+}
+
+.heatmap-cell:hover .heatmap-tooltip {
+  opacity: 1;
 }
 
 @media (max-width: 768px) {
