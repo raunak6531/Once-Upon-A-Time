@@ -16,9 +16,12 @@ import {
   Sparkles,
   Timer,
   XCircle,
+  Trophy,
+  PartyPopper,
 } from 'lucide-react';
 import type { Book, ReadingSession, ReadingStatus } from '@/types';
 import { updateBookOrganization } from '@/lib/readingMetadata';
+import confetti from 'canvas-confetti';
 
 interface BookshelfLibraryProps {
   books: Book[];
@@ -141,7 +144,18 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
 
   const updateBook = useCallback(async (bookId: string, update: Partial<Book>) => {
     const previous = libraryBooks;
+    const oldBook = libraryBooks.find(b => b.id === bookId);
+    
     setLibraryBooks((current) => current.map((book) => (book.id === bookId ? { ...book, ...update } : book)));
+
+    if (update.reading_status === 'finished' && oldBook?.reading_status !== 'finished') {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#fbbf24', '#f59e0b', '#ffffff']
+      });
+    }
 
     try {
       const saved = await updateBookOrganization(bookId, {
