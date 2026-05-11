@@ -568,6 +568,13 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
               }}
             >
               <p className="text-sm leading-6">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-4 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black transition-colors hover:bg-amber-300"
+              >
+                Try Again
+              </button>
             </div>
           </div>
         )}

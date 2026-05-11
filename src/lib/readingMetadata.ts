@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/client';
 import type { Book, ReadingStatus } from '@/types';
 
 export interface BookOrganizationUpdate {
+  title?: string;
+  author?: string | null;
   reading_status?: ReadingStatus | null;
   is_favorite?: boolean;
   tags?: string[];
@@ -33,6 +35,14 @@ export async function updateBookOrganization(bookId: string, update: BookOrganiz
   const supabase = createClient();
   const payload: BookOrganizationUpdate = { ...update };
 
+  if (typeof payload.title === 'string') {
+    payload.title = payload.title.trim().slice(0, 160);
+  }
+
+  if (typeof payload.author === 'string') {
+    payload.author = payload.author.trim().slice(0, 120) || null;
+  }
+
   if (payload.tags) {
     payload.tags = normalizedTags(payload.tags);
   }
@@ -46,6 +56,50 @@ export async function updateBookOrganization(bookId: string, update: BookOrganiz
 
   if (error) throw error;
   return data as Book;
+}
+
+function extractStoragePath(value: string | null, bucket: string) {
+  if (!value) return null;
+
+  if (!value.startsWith('http://') && !value.startsWith('https://')) {
+    return value.replace(/^\/+/, '');
+  }
+
+  try {
+    const url = new URL(value);
+    const markers = [
+      `/storage/v1/object/public/${bucket}/`,
+      `/storage/v1/object/sign/${bucket}/`,
+    ];
+
+    for (const marker of markers) {
+      const index = url.pathname.indexOf(marker);
+      if (index >= 0) {
+        return decodeURIComponent(url.pathname.slice(index + marker.length).replace(/^\/+/, ''));
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export async function deleteBook(book: Book) {
+  const supabase = createClient();
+  const { error } = await supabase.from('books').delete().eq('id', book.id);
+
+  if (error) throw error;
+
+  const epubPath = extractStoragePath(book.epub_file_url, 'epubs');
+  const coverPath = extractStoragePath(book.cover_url, 'covers');
+
+  await Promise.all([
+    epubPath ? supabase.storage.from('epubs').remove([epubPath]) : Promise.resolve(),
+    coverPath ? supabase.storage.from('covers').remove([coverPath]) : Promise.resolve(),
+  ]).catch((storageError) => {
+    console.warn('Book was deleted, but one or more storage assets could not be removed:', storageError);
+  });
 }
 
 export async function recordReadingSession(input: ReadingSessionInput) {

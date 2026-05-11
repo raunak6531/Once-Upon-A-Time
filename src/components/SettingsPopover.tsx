@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Settings, Type, Palette, AlignLeft, Maximize, Minus, Plus } from 'lucide-react';
+import { Settings, Type, Palette, AlignLeft, Maximize, Minus, Plus, Keyboard } from 'lucide-react';
 import type { ReaderSettings } from '@/types';
 
 interface SettingsPopoverProps {
@@ -10,7 +10,7 @@ interface SettingsPopoverProps {
   suggestedColors?: { accent: string; tint: string } | null;
 }
 
-const themes = [
+const themes: Array<{ id: ReaderSettings['theme']; label: string; bg: string; text: string }> = [
   { id: 'dark', label: 'Dark', bg: '#141418', text: '#ffffff' },
   { id: 'sepia', label: 'Sepia', bg: '#f4ecd8', text: '#000000' },
   { id: 'cream', label: 'Cream', bg: '#fffaf0', text: '#000000' },
@@ -19,20 +19,20 @@ const themes = [
   { id: 'custom', label: 'Custom', bg: 'linear-gradient(45deg, #444, #888)', text: '#fff' },
 ];
 
-const fontFamilies = [
+const fontFamilies: Array<{ id: ReaderSettings['fontFamily']; label: string; font: string }> = [
   { id: 'serif', label: 'Serif', font: 'var(--font-serif)' },
   { id: 'sans', label: 'Sans', font: 'var(--font-sans)' },
   { id: 'mono', label: 'Mono', font: 'var(--font-mono)' },
   { id: 'publisher', label: 'Default', font: 'inherit' },
 ];
 
-const lineHeights = [
+const lineHeights: Array<{ id: ReaderSettings['lineHeight']; label: string; value: number }> = [
   { id: 'compact', label: 'Compact', value: 1.4 },
   { id: 'normal', label: 'Normal', value: 1.8 },
   { id: 'relaxed', label: 'Relaxed', value: 2.2 },
 ];
 
-const margins = [
+const margins: Array<{ id: ReaderSettings['margin']; label: string; value: string }> = [
   { id: 'narrow', label: 'Narrow', value: '5%' },
   { id: 'normal', label: 'Normal', value: '15%' },
   { id: 'wide', label: 'Wide', value: '25%' },
@@ -92,7 +92,7 @@ export default function SettingsPopover({ settings, onSettingsChange, suggestedC
               {themes.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => onSettingsChange({ theme: t.id as any })}
+                  onClick={() => onSettingsChange({ theme: t.id })}
                   className={`relative h-12 rounded-lg border-2 transition-all duration-200 overflow-hidden flex flex-col items-center justify-center gap-1`}
                   style={{
                     background: t.bg,
@@ -182,7 +182,7 @@ export default function SettingsPopover({ settings, onSettingsChange, suggestedC
               {fontFamilies.map((f) => (
                 <button
                   key={f.id}
-                  onClick={() => onSettingsChange({ fontFamily: f.id as any })}
+                  onClick={() => onSettingsChange({ fontFamily: f.id })}
                   className="flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200"
                   style={{
                     background: settings.fontFamily === f.id ? 'var(--theme-accent)' : 'rgba(255,255,255,0.06)',
@@ -227,7 +227,7 @@ export default function SettingsPopover({ settings, onSettingsChange, suggestedC
                 {lineHeights.map((l) => (
                   <button
                     key={l.id}
-                    onClick={() => onSettingsChange({ lineHeight: l.id as any })}
+                    onClick={() => onSettingsChange({ lineHeight: l.id })}
                     className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all duration-200 border ${
                       settings.lineHeight === l.id
                         ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]'
@@ -248,7 +248,7 @@ export default function SettingsPopover({ settings, onSettingsChange, suggestedC
                 {margins.map((m) => (
                   <button
                     key={m.id}
-                    onClick={() => onSettingsChange({ margin: m.id as any })}
+                    onClick={() => onSettingsChange({ margin: m.id })}
                     className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all duration-200 border ${
                       settings.margin === m.id
                         ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]'
@@ -259,6 +259,20 @@ export default function SettingsPopover({ settings, onSettingsChange, suggestedC
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <label className="text-[10px] font-bold uppercase tracking-[0.2em] mb-3 block opacity-50 flex items-center gap-2">
+              <Keyboard className="w-3 h-3" /> Shortcuts
+            </label>
+            <div className="reader-shortcuts">
+              <span><kbd>←</kbd><kbd>→</kbd> Turn pages</span>
+              <span><kbd>T</kbd> Contents</span>
+              <span><kbd>S</kbd> Settings</span>
+              <span><kbd>F</kbd> Fullscreen</span>
+              <span><kbd>Ctrl</kbd><kbd>F</kbd> Search</span>
+              <span><kbd>Esc</kbd> Close panels</span>
             </div>
           </div>
         </div>

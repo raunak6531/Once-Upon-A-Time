@@ -761,8 +761,8 @@ export default function ReaderControls({
         <div className="max-w-3xl mx-auto space-y-4">
           <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--theme-text-secondary)]">
             <div className="flex gap-4">
-              <span>Chapter Progression</span>
-              <span className="opacity-40">•</span>
+              <span>{currentChapter || 'Book Progress'}</span>
+              <span className="opacity-40">/</span>
               <span className="text-[var(--theme-accent)]">~{estimatedMinutesLeft} mins left</span>
             </div>
             <span className="text-[var(--theme-accent)]">{progress}%</span>

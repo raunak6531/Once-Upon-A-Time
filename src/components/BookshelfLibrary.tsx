@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Edit3,
   FileText,
   Filter,
   Flame,
@@ -17,12 +18,14 @@ import {
   Plus,
   Search,
   Sparkles,
+  Tags,
   Timer,
+  Trash2,
   X,
   XCircle,
 } from 'lucide-react';
 import type { Book, ReadingSession, ReadingStatus } from '@/types';
-import { updateBookOrganization } from '@/lib/readingMetadata';
+import { deleteBook as deleteBookRecord, updateBookOrganization } from '@/lib/readingMetadata';
 import confetti from 'canvas-confetti';
 
 interface BookshelfLibraryProps {
@@ -34,6 +37,7 @@ interface BookshelfLibraryProps {
 
 type SortKey = 'recent' | 'title' | 'author' | 'progress';
 type StatusFilter = 'all' | ReadingStatus;
+type ShelfFilter = 'all' | string;
 
 const STATUS_LABELS: Record<ReadingStatus, string> = {
   want_to_read: 'Want to Read',
@@ -101,6 +105,7 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [shelfFilter, setShelfFilter] = useState<ShelfFilter>('all');
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [activeCover, setActiveCover] = useState<string | null>(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
@@ -129,9 +134,10 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
         book.title?.toLowerCase().includes(q) ||
         book.author?.toLowerCase().includes(q);
       const matchesStatus = statusFilter === 'all' || statusFor(book) === statusFilter;
+      const matchesShelf = shelfFilter === 'all' || (book.tags || []).includes(shelfFilter);
       const matchesFavorite = !favoriteOnly || Boolean(book.is_favorite);
 
-      return matchesQuery && matchesStatus && matchesFavorite;
+      return matchesQuery && matchesStatus && matchesShelf && matchesFavorite;
     });
 
     if (sort === 'title') list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
@@ -139,10 +145,15 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
     else if (sort === 'progress') list.sort((a, b) => Number(b.progress_percent || 0) - Number(a.progress_percent || 0));
     else list.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
     return list;
-  }, [favoriteOnly, libraryBooks, query, sort, statusFilter]);
+  }, [favoriteOnly, libraryBooks, query, shelfFilter, sort, statusFilter]);
 
   const lastAdded = libraryBooks[0];
   const selectedBook = selectedBookId ? libraryBooks.find((book) => book.id === selectedBookId) || null : null;
+  const shelves = useMemo(() => {
+    return Array.from(new Set(libraryBooks.flatMap((book) => book.tags || [])))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }, [libraryBooks]);
 
   const handleHover = useCallback((cover: string | null) => setActiveCover(cover), []);
   const open = useCallback((id: string) => router.push(`/read/${id}`), [router]);
@@ -164,8 +175,11 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
 
     try {
       const saved = await updateBookOrganization(bookId, {
+        title: update.title,
+        author: update.author,
         reading_status: update.reading_status,
         is_favorite: update.is_favorite ?? undefined,
+        tags: update.tags ?? undefined,
       });
       setLibraryBooks((current) => current.map((book) => (
         book.id === bookId
@@ -180,6 +194,23 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
     } catch (error) {
       console.error('Failed to update book organization:', error);
       setLibraryBooks(previous);
+    }
+  }, [libraryBooks]);
+
+  const deleteBook = useCallback(async (book: Book) => {
+    const confirmed = window.confirm(`Delete "${book.title}" from your library? This cannot be undone.`);
+    if (!confirmed) return;
+
+    const previous = libraryBooks;
+    setSelectedBookId(null);
+    setLibraryBooks((current) => current.filter((item) => item.id !== book.id));
+
+    try {
+      await deleteBookRecord(book);
+    } catch (error) {
+      console.error('Failed to delete book:', error);
+      setLibraryBooks(previous);
+      setSelectedBookId(book.id);
     }
   }, [libraryBooks]);
 
@@ -321,6 +352,29 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
               <Heart className="w-3.5 h-3.5" /> Favorites
             </button>
           </div>
+
+          {shelves.length > 0 && (
+            <div className="library-shelf-panel" aria-label="Shelf filter">
+              <Tags className="w-4 h-4" />
+              <button
+                type="button"
+                className={`library-filter-chip${shelfFilter === 'all' ? ' is-active' : ''}`}
+                onClick={() => setShelfFilter('all')}
+              >
+                All shelves
+              </button>
+              {shelves.map((shelf) => (
+                <button
+                  key={shelf}
+                  type="button"
+                  className={`library-filter-chip${shelfFilter === shelf ? ' is-active' : ''}`}
+                  onClick={() => setShelfFilter(shelf)}
+                >
+                  {shelf}
+                </button>
+              ))}
+            </div>
+          )}
         </header>
 
         <ContinueReadingHero 
@@ -357,6 +411,7 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
           onClose={() => setSelectedBookId(null)}
           onOpen={open}
           onUpdate={updateBook}
+          onDelete={deleteBook}
         />
       )}
     </div>
@@ -653,17 +708,38 @@ function BookDetailsDrawer({
   onClose,
   onOpen,
   onUpdate,
+  onDelete,
 }: {
   book: Book;
   noteCount: number;
   onClose: () => void;
   onOpen: (id: string) => void;
   onUpdate: (bookId: string, update: Partial<Book>) => void;
+  onDelete: (book: Book) => void;
 }) {
   const progress = Math.max(0, Math.min(100, Number(book.progress_percent || 0)));
   const totalSeconds = Number(book.total_reading_seconds || 0);
   const lastRead = book.last_read_at ? new Date(book.last_read_at).toLocaleDateString() : 'Not started';
   const finishedAt = book.finished_at ? new Date(book.finished_at).toLocaleDateString() : null;
+  const [isEditing, setIsEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(book.title);
+  const [authorDraft, setAuthorDraft] = useState(book.author || '');
+  const [shelfDraft, setShelfDraft] = useState((book.tags || []).join(', '));
+
+  const saveDetails = () => {
+    const nextTitle = titleDraft.trim();
+    if (!nextTitle) return;
+
+    onUpdate(book.id, {
+      title: nextTitle,
+      author: authorDraft.trim(),
+      tags: shelfDraft
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    });
+    setIsEditing(false);
+  };
 
   return (
     <div className="book-details-backdrop" onClick={(event) => event.target === event.currentTarget && onClose()}>
@@ -688,8 +764,26 @@ function BookDetailsDrawer({
           </div>
           <div>
             <p className="book-details-kicker">{STATUS_LABELS[statusFor(book)]}</p>
-            <h2>{book.title}</h2>
-            <p>{book.author || 'Unknown Author'}</p>
+            {isEditing ? (
+              <div className="book-details-edit-fields">
+                <input
+                  value={titleDraft}
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  aria-label="Book title"
+                />
+                <input
+                  value={authorDraft}
+                  onChange={(event) => setAuthorDraft(event.target.value)}
+                  placeholder="Unknown Author"
+                  aria-label="Book author"
+                />
+              </div>
+            ) : (
+              <>
+                <h2>{book.title}</h2>
+                <p>{book.author || 'Unknown Author'}</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -726,7 +820,39 @@ function BookDetailsDrawer({
           </div>
         </div>
 
+        <div className="book-details-section">
+          <p>Shelves</p>
+          {isEditing ? (
+            <input
+              className="book-details-shelf-input"
+              value={shelfDraft}
+              onChange={(event) => setShelfDraft(event.target.value)}
+              placeholder="Fantasy, Classics, Study"
+              aria-label="Shelves separated by commas"
+            />
+          ) : (book.tags || []).length > 0 ? (
+            <div className="book-details-shelves">
+              {(book.tags || []).map((tag) => (
+                <span key={tag}>{tag}</span>
+              ))}
+            </div>
+          ) : (
+            <div className="book-details-empty-shelf">No shelves yet</div>
+          )}
+        </div>
+
         <div className="book-details-actions">
+          {isEditing ? (
+            <button type="button" className="book-details-favorite" onClick={saveDetails}>
+              <CheckCircle2 className="w-4 h-4" />
+              Save
+            </button>
+          ) : (
+            <button type="button" className="book-details-favorite" onClick={() => setIsEditing(true)}>
+              <Edit3 className="w-4 h-4" />
+              Edit
+            </button>
+          )}
           <button
             type="button"
             className={`book-details-favorite${book.is_favorite ? ' is-active' : ''}`}
@@ -734,6 +860,10 @@ function BookDetailsDrawer({
           >
             <Heart className="w-4 h-4" />
             {book.is_favorite ? 'Favorited' : 'Favorite'}
+          </button>
+          <button type="button" className="book-details-delete" onClick={() => onDelete(book)}>
+            <Trash2 className="w-4 h-4" />
+            Delete
           </button>
           <button type="button" className="btn-3d btn-3d-amber book-details-read" onClick={() => onOpen(book.id)}>
             <BookOpen className="w-4 h-4" />
