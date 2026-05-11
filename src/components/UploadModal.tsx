@@ -78,11 +78,6 @@ export default function UploadModal({ onClose, onUploadComplete }: UploadModalPr
 
       if (epubError) throw new Error(`EPUB upload failed: ${epubError.message}`);
 
-      const { data: epubUrlData } = supabase.storage
-        .from('epubs')
-        .getPublicUrl(epubPath);
-      const epubFileUrl = epubUrlData.publicUrl;
-
       setProgress(35);
 
       // Step 2: Parse EPUB for metadata
@@ -114,10 +109,7 @@ export default function UploadModal({ onClose, onUploadComplete }: UploadModalPr
             .upload(coverPath, blob, { contentType: blob.type || 'image/jpeg' });
 
           if (!coverError) {
-            const { data: coverUrlData } = supabase.storage
-              .from('covers')
-              .getPublicUrl(coverPath);
-            coverUrl = coverUrlData.publicUrl;
+            coverUrl = coverPath;
           }
         }
       } catch (coverErr) {
@@ -136,7 +128,7 @@ export default function UploadModal({ onClose, onUploadComplete }: UploadModalPr
           title,
           author,
           cover_url: coverUrl,
-          epub_file_url: epubFileUrl,
+          epub_file_url: epubPath,
         })
         .select()
         .single();

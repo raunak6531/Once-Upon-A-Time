@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { hydrateSignedBookAssets } from '@/lib/storage';
 import { redirect } from 'next/navigation';
 import type { Book, ReadingSession } from '@/types';
 import LibraryView from '@/components/LibraryView';
@@ -37,5 +38,7 @@ export default async function LibraryPage() {
     console.error('Failed to fetch reading sessions:', sessionsError);
   }
 
-  return <LibraryView books={(books as Book[]) || []} sessions={(sessions as ReadingSession[]) || []} />;
+  const signedBooks = await Promise.all(((books as Book[]) || []).map(hydrateSignedBookAssets));
+
+  return <LibraryView books={signedBooks} sessions={(sessions as ReadingSession[]) || []} />;
 }

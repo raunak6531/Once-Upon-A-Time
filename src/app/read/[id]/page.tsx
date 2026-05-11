@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { hydrateSignedBookAssets } from '@/lib/storage';
 import { redirect, notFound } from 'next/navigation';
 import type { Book } from '@/types';
 
@@ -43,7 +44,7 @@ export default async function ReadPage({ params }: ReadPageProps) {
     notFound();
   }
 
-  const typedBook = book as Book;
+  const typedBook = await hydrateSignedBookAssets(book as Book);
 
   return (
     <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">

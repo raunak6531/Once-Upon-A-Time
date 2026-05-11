@@ -1,20 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { Mail, Lock, Loader2, Feather } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Feather, Loader2, Lock, Mail } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { OUATLogo } from '@/components/OUATLogo';
 
 const LITERARY_QUOTES = [
-  { text: '"A reader lives a thousand lives before he dies."', author: '— George R.R. Martin' },
-  { text: '"One must always be careful of books."', author: '— Cassandra Clare' },
-  { text: '"We read to know we are not alone."', author: '— C.S. Lewis' },
-  { text: '"A book is a dream you hold in your hands."', author: '— Neil Gaiman' },
-  { text: '"There is no friend as loyal as a book."', author: '— Ernest Hemingway' },
+  { text: '"A reader lives a thousand lives before he dies."', author: '- George R.R. Martin' },
+  { text: '"One must always be careful of books."', author: '- Cassandra Clare' },
+  { text: '"We read to know we are not alone."', author: '- C.S. Lewis' },
+  { text: '"A book is a dream you hold in your hands."', author: '- Neil Gaiman' },
+  { text: '"There is no friend as loyal as a book."', author: '- Ernest Hemingway' },
 ];
 
-/* Floating particle for background atmosphere */
+type AuthMode = 'sign-in' | 'sign-up' | 'forgot-password';
+
 function FloatingParticle({ delay, x, size }: { delay: number; x: number; size: number }) {
   return (
     <div
@@ -24,86 +24,113 @@ function FloatingParticle({ delay, x, size }: { delay: number; x: number; size: 
         height: size,
         left: `${x}%`,
         bottom: '-20px',
-        background: `radial-gradient(circle, rgba(251, 191, 36, ${0.4 + Math.random() * 0.3}) 0%, transparent 70%)`,
-        animation: `particleRise ${8 + Math.random() * 6}s ease-in infinite`,
+        background: 'radial-gradient(circle, rgba(251, 191, 36, 0.55) 0%, transparent 70%)',
+        animation: `particleRise 11s ease-in infinite`,
         animationDelay: `${delay}s`,
       }}
     />
   );
 }
 
+async function postJson<T>(url: string, payload: Record<string, string>) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    cache: 'no-store',
+    body: JSON.stringify(payload),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Something went wrong');
+  }
+
+  return data;
+}
+
 export default function LoginPage() {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [mode, setMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
   const [quoteIndex, setQuoteIndex] = useState(0);
   const router = useRouter();
-  const supabase = createClient();
+  const searchParams = useSearchParams();
+  const callbackError =
+    searchParams.get('error') === 'auth_callback_failed'
+      ? 'That link is no longer valid. Please try again.'
+      : null;
 
   useEffect(() => {
-    setMounted(true);
     const quoteInterval = setInterval(() => {
       setQuoteIndex((prev) => (prev + 1) % LITERARY_QUOTES.length);
     }, 5000);
+
     return () => clearInterval(quoteInterval);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const isSignUp = mode === 'sign-up';
+  const isForgotPassword = mode === 'forgot-password';
+
+  const handleModeChange = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setError(null);
+    setMessage(null);
+    setPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
     setError(null);
     setMessage(null);
 
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-          },
-        });
-        if (error) throw error;
-        setMessage('Account created! Signing you in...');
-        // Auto sign-in after sign-up (if email confirmation is disabled)
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (!signInError) {
+      if (mode === 'forgot-password') {
+        const data = await postJson<{ message: string }>('/api/auth/forgot-password', { email });
+        setMessage(data.message);
+        setMode('sign-in');
+      } else if (mode === 'sign-up') {
+        const data = await postJson<{ message: string; requiresEmailConfirmation: boolean }>(
+          '/api/auth/sign-up',
+          { email, password, confirmPassword }
+        );
+
+        setMessage(data.message);
+
+        if (data.requiresEmailConfirmation) {
+          setMode('sign-in');
+        } else {
           router.push('/library');
           router.refresh();
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
+        await postJson('/api/auth/sign-in', { email, password });
         router.push('/library');
         router.refresh();
       }
-    } catch (err: unknown) {
-      const authError = err as { message: string };
-      setError(authError.message || 'Something went wrong');
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Something went wrong');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center"
+    <div
+      className="min-h-screen relative overflow-hidden flex items-center justify-center"
       style={{
         background: 'linear-gradient(135deg, #0c0a1a 0%, #1a1035 30%, #12101f 60%, #0a0a14 100%)',
       }}
     >
-      {/* Animated background — bookshelf silhouette gradient */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {/* Warm glow behind the bookmark */}
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
           style={{
@@ -113,39 +140,35 @@ export default function LoginPage() {
             filter: 'blur(60px)',
           }}
         />
-        {/* Floating golden particles */}
-        {mounted && Array.from({ length: 15 }).map((_, i) => (
+        {Array.from({ length: 15 }).map((_, i) => (
           <FloatingParticle
             key={i}
             delay={i * 0.8}
-            x={10 + Math.random() * 80}
-            size={3 + Math.random() * 5}
+            x={10 + ((i * 17) % 80)}
+            size={3 + (i % 5)}
           />
         ))}
-        {/* Subtle star dots */}
-        {mounted && Array.from({ length: 30 }).map((_, i) => (
+        {Array.from({ length: 30 }).map((_, i) => (
           <div
             key={`star-${i}`}
             className="absolute rounded-full"
             style={{
-              width: 1 + Math.random() * 2,
-              height: 1 + Math.random() * 2,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              width: 1 + (i % 2),
+              height: 1 + (i % 2),
+              left: `${(i * 13) % 100}%`,
+              top: `${(i * 19) % 100}%`,
               background: 'rgba(255,255,255,0.3)',
-              animation: `twinkle ${3 + Math.random() * 4}s ease-in-out infinite`,
-              animationDelay: `${Math.random() * 5}s`,
+              animation: `twinkle ${3 + (i % 4)}s ease-in-out infinite`,
+              animationDelay: `${(i % 5) * 0.7}s`,
             }}
           />
         ))}
       </div>
 
-      {/* Main bookmark container */}
       <div
-        className={`relative z-10 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        className="relative z-10 transition-all duration-700 opacity-100 translate-y-0"
         style={{ perspective: '1000px' }}
       >
-        {/* Tassel / Ribbon hanging from the top */}
         <div className="absolute left-1/2 -translate-x-1/2 -top-16 z-20 flex flex-col items-center">
           <div
             className="w-1 rounded-full"
@@ -163,7 +186,6 @@ export default function LoginPage() {
           />
         </div>
 
-        {/* The Bookmark Shape */}
         <div
           className="relative"
           style={{
@@ -171,7 +193,6 @@ export default function LoginPage() {
             filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.5))',
           }}
         >
-          {/* Bookmark body */}
           <div
             style={{
               background: 'linear-gradient(175deg, #1e1b30 0%, #171425 40%, #13111f 100%)',
@@ -183,7 +204,6 @@ export default function LoginPage() {
               overflow: 'hidden',
             }}
           >
-            {/* Gold edge shimmer */}
             <div
               className="absolute top-0 left-0 right-0 h-1"
               style={{
@@ -192,15 +212,15 @@ export default function LoginPage() {
               }}
             />
 
-            {/* Decorative corner flourishes */}
-            <div className="absolute top-3 left-3 w-6 h-6 opacity-20"
+            <div
+              className="absolute top-3 left-3 w-6 h-6 opacity-20"
               style={{ borderTop: '2px solid #fbbf24', borderLeft: '2px solid #fbbf24', borderRadius: '4px 0 0 0' }}
             />
-            <div className="absolute top-3 right-3 w-6 h-6 opacity-20"
+            <div
+              className="absolute top-3 right-3 w-6 h-6 opacity-20"
               style={{ borderTop: '2px solid #fbbf24', borderRight: '2px solid #fbbf24', borderRadius: '0 4px 0 0' }}
             />
 
-            {/* Logo — custom SVG, no generic icons */}
             <div className="text-center mb-6">
               <div className="inline-block mb-2">
                 <OUATLogo size={56} />
@@ -212,32 +232,31 @@ export default function LoginPage() {
                 Once Upon A Time
               </h1>
               <p className="text-xs" style={{ color: 'rgba(251, 191, 36, 0.7)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-                ✦ Your Story Awaits ✦
+                Your story awaits
               </p>
             </div>
 
-            {/* Tab switcher - 3D style */}
             <div className="flex gap-2 mb-5">
               <button
                 type="button"
-                onClick={() => { setIsSignUp(false); setError(null); setMessage(null); }}
-                className={`btn-3d flex-1 py-2.5 text-sm ${!isSignUp ? 'btn-3d-purple' : 'btn-3d-slate'}`}
+                onClick={() => handleModeChange('sign-in')}
+                className={`btn-3d flex-1 py-2.5 text-sm ${mode === 'sign-in' ? 'btn-3d-purple' : 'btn-3d-slate'}`}
               >
                 Sign In
               </button>
               <button
                 type="button"
-                onClick={() => { setIsSignUp(true); setError(null); setMessage(null); }}
-                className={`btn-3d flex-1 py-2.5 text-sm ${isSignUp ? 'btn-3d-purple' : 'btn-3d-slate'}`}
+                onClick={() => handleModeChange('sign-up')}
+                className={`btn-3d flex-1 py-2.5 text-sm ${mode === 'sign-up' ? 'btn-3d-purple' : 'btn-3d-slate'}`}
               >
                 Sign Up
               </button>
             </div>
 
-            {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-3.5">
               <div className="relative group">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
+                <Mail
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
                   style={{ color: 'rgba(251, 191, 36, 0.5)' }}
                 />
                 <input
@@ -245,53 +264,69 @@ export default function LoginPage() {
                   type="email"
                   placeholder="Email address"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
                   required
                   className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none transition-all duration-200"
                   style={{
                     background: 'rgba(255, 255, 255, 0.04)',
                     border: '1px solid rgba(251, 191, 36, 0.12)',
                   }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(251, 191, 36, 0.4)';
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(251, 191, 36, 0.08)';
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(251, 191, 36, 0.12)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
                 />
               </div>
 
-              <div className="relative group">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
-                  style={{ color: 'rgba(251, 191, 36, 0.5)' }}
-                />
-                <input
-                  id="password-input"
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none transition-all duration-200"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(251, 191, 36, 0.12)',
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(251, 191, 36, 0.4)';
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(251, 191, 36, 0.08)';
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(251, 191, 36, 0.12)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                />
-              </div>
+              {!isForgotPassword && (
+                <div className="relative group">
+                  <Lock
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
+                    style={{ color: 'rgba(251, 191, 36, 0.5)' }}
+                  />
+                  <input
+                    id="password-input"
+                    type="password"
+                    placeholder={isSignUp ? 'Create password' : 'Password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                    minLength={8}
+                    className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none transition-all duration-200"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(251, 191, 36, 0.12)',
+                    }}
+                  />
+                </div>
+              )}
 
-              {error && (
+              {isSignUp && (
+                <div className="relative group">
+                  <Lock
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
+                    style={{ color: 'rgba(251, 191, 36, 0.5)' }}
+                  />
+                  <input
+                    id="confirm-password-input"
+                    type="password"
+                    placeholder="Confirm password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    required
+                    minLength={8}
+                    className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none transition-all duration-200"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(251, 191, 36, 0.12)',
+                    }}
+                  />
+                </div>
+              )}
+
+              {isSignUp && (
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.52)' }}>
+                  Use at least 8 characters with at least one letter and one number.
+                </p>
+              )}
+
+              {(error || callbackError) && (
                 <div
                   className="text-sm p-3 rounded-xl animate-fade-in flex items-center gap-2"
                   style={{
@@ -300,7 +335,7 @@ export default function LoginPage() {
                     border: '1px solid rgba(239, 68, 68, 0.2)',
                   }}
                 >
-                  <span>⚠</span> {error}
+                  <span>!</span> {error || callbackError}
                 </div>
               )}
 
@@ -313,11 +348,10 @@ export default function LoginPage() {
                     border: '1px solid rgba(34, 197, 94, 0.2)',
                   }}
                 >
-                  <span>✓</span> {message}
+                  <span>*</span> {message}
                 </div>
               )}
 
-              {/* 3D Submit Button */}
               <button
                 id="auth-submit-btn"
                 type="submit"
@@ -330,14 +364,33 @@ export default function LoginPage() {
                 ) : (
                   <>
                     <Feather className="w-4 h-4" />
-                    {isSignUp ? 'Begin Your Story' : 'Open Your Book'}
+                    {isForgotPassword ? 'Send Reset Link' : isSignUp ? 'Begin Your Story' : 'Open Your Book'}
                   </>
                 )}
               </button>
             </form>
+
+            <div className="mt-4 text-center text-sm">
+              {isForgotPassword ? (
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('sign-in')}
+                  className="text-amber-300 hover:text-amber-200 transition-colors"
+                >
+                  Back to sign in
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('forgot-password')}
+                  className="text-amber-300 hover:text-amber-200 transition-colors"
+                >
+                  Forgot your password?
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Bookmark V-notch bottom */}
           <div className="relative" style={{ height: '40px' }}>
             <svg
               viewBox="0 0 380 40"
@@ -360,7 +413,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Rotating literary quote */}
         <div className="text-center mt-8 max-w-sm mx-auto" style={{ minHeight: '56px' }}>
           <p
             className="text-base italic transition-opacity duration-500"
@@ -376,7 +428,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* CSS animations */}
       <style jsx>{`
         @keyframes particleRise {
           0% {
