@@ -51,7 +51,7 @@ export default async function ReadPage({ params }: ReadPageProps) {
       <ReaderControls
         bookId={typedBook.id}
         bookTitle={typedBook.title}
-        epubUrl={typedBook.epub_file_url}
+        epubUrl={`/api/books/${typedBook.id}/epub`}
         initialCfi={typedBook.current_cfi}
         coverUrl={typedBook.cover_url}
         initialProgressPercent={typedBook.progress_percent}

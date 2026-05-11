@@ -5,7 +5,7 @@ function stripLeadingSlash(value: string) {
   return value.replace(/^\/+/, '');
 }
 
-function extractStoragePath(value: string, bucket: string) {
+export function extractStoragePath(value: string, bucket: string) {
   if (!value) return null;
 
   if (!value.startsWith('http://') && !value.startsWith('https://')) {
@@ -22,7 +22,7 @@ function extractStoragePath(value: string, bucket: string) {
     for (const marker of markers) {
       const index = url.pathname.indexOf(marker);
       if (index >= 0) {
-        return stripLeadingSlash(url.pathname.slice(index + marker.length));
+        return decodeURIComponent(stripLeadingSlash(url.pathname.slice(index + marker.length)));
       }
     }
   } catch {

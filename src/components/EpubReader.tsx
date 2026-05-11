@@ -135,8 +135,30 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
     const temporarySearchCfiRef = useRef<string | null>(null);
     const temporarySearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [isRenditionReady, setIsRenditionReady] = useState(false);
     const initializedRef = useRef(false);
+
+    const fetchEpubArchive = useCallback(async (sourceUrl: string) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20_000);
+
+      try {
+        const response = await fetch(sourceUrl, {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`EPUB request failed with ${response.status}`);
+        }
+
+        return await response.arrayBuffer();
+      } finally {
+        clearTimeout(timeout);
+      }
+    }, []);
 
     const chapterForSection = useCallback((section: EpubSection) => {
       const exact = bookRef.current?.navigation.get(section.href);
@@ -390,7 +412,8 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
 
         try {
           const ePub = await import('epubjs');
-          const book = ePub.default(url) as unknown as EpubBook;
+          const archive = await fetchEpubArchive(url);
+          const book = ePub.default(archive) as unknown as EpubBook;
           bookRef.current = book;
 
           await book.ready;
@@ -499,6 +522,11 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
           onReady?.();
         } catch (err) {
           console.error('Failed to initialize EPUB reader:', err);
+          setLoadError(
+            err instanceof Error && err.name === 'AbortError'
+              ? 'This EPUB request timed out. Please refresh and try again.'
+              : 'This EPUB could not be loaded. Please refresh, or upload the book again if the problem continues.'
+          );
           setIsLoading(false);
         }
       };
@@ -529,6 +557,20 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
             transition: 'opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
           }}
         />
+        {loadError && (
+          <div className="absolute inset-0 flex items-center justify-center px-8">
+            <div
+              className="max-w-md rounded-xl border p-5 text-center"
+              style={{
+                background: 'rgba(20, 20, 24, 0.9)',
+                borderColor: 'rgba(251, 191, 36, 0.18)',
+                color: 'var(--theme-text)',
+              }}
+            >
+              <p className="text-sm leading-6">{loadError}</p>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
