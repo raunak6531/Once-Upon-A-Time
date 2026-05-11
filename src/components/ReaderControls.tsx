@@ -2,10 +2,12 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, ChevronLeft, ChevronRight, Bookmark, Highlighter, List, Search, Share2, StickyNote, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Bookmark, ChevronsUp, Highlighter, List, Search, Share2, StickyNote, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SettingsPopover from './SettingsPopover';
+import AmbiencePopover from './AmbiencePopover';
 import { useBookProgress } from '@/hooks/useBookProgress';
+import { useAmbientSound } from '@/hooks/useAmbientSound';
 import { useReaderPreferences } from '@/hooks/useReaderPreferences';
 import { useReadingSession } from '@/hooks/useReadingSession';
 import type { EpubReaderRef } from './EpubReader';
@@ -22,7 +24,7 @@ import {
   deleteHighlight as cloudDeleteHighlight
 } from '@/lib/annotations';
 import { fetchDefinition, type DictionaryDefinition } from '@/lib/dictionary';
-import { Book as BookIcon, Loader2, Volume2 } from 'lucide-react';
+import { Book as BookIcon, Loader2 } from 'lucide-react';
 
 // Dynamically import EpubReader with SSR disabled
 const EpubReaderComponent = dynamic(() => import('./EpubReader'), {
@@ -64,7 +66,8 @@ export default function ReaderControls({
   const router = useRouter();
   const readerRef = useRef<EpubReaderRef>(null);
   const { saveCfi } = useBookProgress(bookId, initialCfi);
-  const { settings, isPinned, setSettings, setIsPinned } = useReaderPreferences(bookId);
+  const { settings, isPinned, ambience, setSettings, setIsPinned, setAmbience } = useReaderPreferences(bookId);
+  useAmbientSound(ambience);
 
   const [progress, setProgress] = useState(Math.round(initialProgressPercent || 0));
   const [isReaderReady, setIsReaderReady] = useState(false);
@@ -74,7 +77,6 @@ export default function ReaderControls({
   const [toc, setToc] = useState<TocEntry[]>([]);
   const [bookmarks, setBookmarks] = useState<ReaderBookmark[]>([]);
   const [highlights, setHighlights] = useState<ReaderHighlight[]>([]);
-  const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ReaderSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -100,6 +102,15 @@ export default function ReaderControls({
       setShowControls(false);
     }, 4000);
   }, []);
+
+  const revealControls = useCallback(() => {
+    if (isPinned) {
+      setShowControls(true);
+      return;
+    }
+
+    resetHideTimer();
+  }, [isPinned, resetHideTimer]);
 
   useEffect(() => {
     if (isPinned) {
@@ -138,8 +149,6 @@ export default function ReaderControls({
         setHighlights(data.highlights);
       } catch (err) {
         console.error('Failed to load cloud annotations:', err);
-      } finally {
-        setIsLoadingAnnotations(false);
       }
     }
     load();
@@ -395,6 +404,8 @@ export default function ReaderControls({
   return (
     <div
       className="reader-container transition-colors duration-500"
+      onPointerMove={revealControls}
+      onPointerDown={revealControls}
       style={{ 
         ...themeVars,
         backgroundColor: 'var(--theme-bg)'
@@ -532,6 +543,7 @@ export default function ReaderControls({
           >
             <Search className="w-5 h-5" />
           </button>
+          <AmbiencePopover ambience={ambience} onAmbienceChange={setAmbience} />
           <SettingsPopover
             settings={settings}
             onSettingsChange={handleSettingsChange}
@@ -539,6 +551,17 @@ export default function ReaderControls({
           />
         </div>
       </div>
+
+      {!showControls && (
+        <button
+          type="button"
+          onClick={revealControls}
+          className="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)]/90 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-[var(--theme-text)] shadow-2xl backdrop-blur-xl transition-all hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+        >
+          <ChevronsUp className="w-4 h-4" />
+          Controls
+        </button>
+      )}
 
       {/* Main Content */}
       <div className="absolute inset-0 pt-4 pb-4">

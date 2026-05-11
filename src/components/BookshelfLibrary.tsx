@@ -11,13 +11,12 @@ import {
   Flame,
   Heart,
   Library,
+  type LucideIcon,
   Plus,
   Search,
   Sparkles,
   Timer,
   XCircle,
-  Trophy,
-  PartyPopper,
 } from 'lucide-react';
 import type { Book, ReadingSession, ReadingStatus } from '@/types';
 import { updateBookOrganization } from '@/lib/readingMetadata';
@@ -162,7 +161,16 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
         reading_status: update.reading_status,
         is_favorite: update.is_favorite ?? undefined,
       });
-      setLibraryBooks((current) => current.map((book) => (book.id === bookId ? { ...book, ...saved } : book)));
+      setLibraryBooks((current) => current.map((book) => (
+        book.id === bookId
+          ? {
+              ...book,
+              ...saved,
+              cover_url: book.cover_url,
+              epub_file_url: book.epub_file_url,
+            }
+          : book
+      )));
     } catch (error) {
       console.error('Failed to update book organization:', error);
       setLibraryBooks(previous);
@@ -485,25 +493,13 @@ function ReadingHeatmap({ sessions }: { sessions: ReadingSession[] }) {
   );
 }
 
-function StatInlineItem({ icon: Icon, value, label }: { icon: any; value: string; label: string }) {
+function StatInlineItem({ icon: Icon, value, label }: { icon: LucideIcon; value: string; label: string }) {
   return (
     <div className="stat-inline-item">
       <Icon className="w-3.5 h-3.5" />
       <span className="stat-value">{value}</span>
       <span className="stat-label">{label}</span>
     </div>
-  );
-}
-
-function StatItem({ icon: Icon, label, value }: { icon: typeof Library; label: string; value: string }) {
-  return (
-    <span className="library-stat-item">
-      <Icon className="w-4 h-4" />
-      <span>
-        <strong>{value}</strong>
-        <em>{label}</em>
-      </span>
-    </span>
   );
 }
 

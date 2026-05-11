@@ -43,9 +43,18 @@ export interface ReaderSettings {
   customText?: string;
 }
 
+export type ReaderAmbienceId = 'off' | 'rain' | 'fireplace';
+
+export interface ReaderAmbienceSettings {
+  ambience: ReaderAmbienceId;
+  volume: number;
+  enabled: boolean;
+}
+
 export interface ReaderPreferences {
   settings: ReaderSettings;
   isPinned: boolean;
+  ambience: ReaderAmbienceSettings;
 }
 
 export interface ReaderBookmark {

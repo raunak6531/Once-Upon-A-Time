@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ReaderPreferences, ReaderSettings } from '@/types';
+import type { ReaderAmbienceId, ReaderAmbienceSettings, ReaderPreferences, ReaderSettings } from '@/types';
 
 const STORAGE_VERSION = 1;
 
@@ -18,6 +18,11 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
 const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   settings: DEFAULT_READER_SETTINGS,
   isPinned: false,
+  ambience: {
+    ambience: 'off',
+    volume: 0.34,
+    enabled: false,
+  },
 };
 
 const themes = new Set<ReaderSettings['theme']>([
@@ -31,6 +36,7 @@ const themes = new Set<ReaderSettings['theme']>([
 const fontFamilies = new Set<ReaderSettings['fontFamily']>(['serif', 'sans', 'mono', 'publisher']);
 const lineHeights = new Set<ReaderSettings['lineHeight']>(['compact', 'normal', 'relaxed']);
 const margins = new Set<ReaderSettings['margin']>(['narrow', 'normal', 'wide']);
+const ambiences = new Set<ReaderAmbienceId>(['off', 'rain', 'fireplace']);
 
 function storageKey(bookId: string) {
   return `reader_preferences_${bookId}`;
@@ -61,6 +67,25 @@ function normalizeSettings(value: unknown): ReaderSettings {
   };
 }
 
+function normalizeAmbience(value: unknown): ReaderAmbienceSettings {
+  const candidate =
+    typeof value === 'object' && value ? (value as Partial<ReaderAmbienceSettings>) : {};
+  const volume = typeof candidate.volume === 'number' ? candidate.volume : DEFAULT_READER_PREFERENCES.ambience.volume;
+  const ambience =
+    candidate.ambience && ambiences.has(candidate.ambience)
+      ? candidate.ambience
+      : DEFAULT_READER_PREFERENCES.ambience.ambience;
+
+  return {
+    ambience,
+    volume: Math.min(1, Math.max(0, volume)),
+    enabled:
+      ambience !== 'off' && typeof candidate.enabled === 'boolean'
+        ? candidate.enabled
+        : DEFAULT_READER_PREFERENCES.ambience.enabled,
+  };
+}
+
 function normalizePreferences(value: unknown): ReaderPreferences {
   const candidate =
     typeof value === 'object' && value ? (value as Partial<ReaderPreferences> & { version?: number }) : {};
@@ -68,6 +93,7 @@ function normalizePreferences(value: unknown): ReaderPreferences {
   return {
     settings: normalizeSettings(candidate.settings),
     isPinned: typeof candidate.isPinned === 'boolean' ? candidate.isPinned : DEFAULT_READER_PREFERENCES.isPinned,
+    ambience: normalizeAmbience(candidate.ambience),
   };
 }
 
@@ -118,13 +144,25 @@ export function useReaderPreferences(bookId: string) {
     }));
   }, []);
 
+  const setAmbience = useCallback((ambience: Partial<ReaderAmbienceSettings>) => {
+    setPreferences((prev) => ({
+      ...prev,
+      ambience: normalizeAmbience({
+        ...prev.ambience,
+        ...ambience,
+      }),
+    }));
+  }, []);
+
   return useMemo(
     () => ({
       settings: preferences.settings,
       isPinned: preferences.isPinned,
+      ambience: preferences.ambience,
       setSettings,
       setIsPinned,
+      setAmbience,
     }),
-    [preferences.settings, preferences.isPinned, setSettings, setIsPinned]
+    [preferences.settings, preferences.isPinned, preferences.ambience, setSettings, setIsPinned, setAmbience]
   );
 }
