@@ -10,9 +10,10 @@ import BookshelfLibrary from './BookshelfLibrary';
 interface LibraryViewProps {
   books: Book[];
   sessions: ReadingSession[];
+  noteCounts: Record<string, number>;
 }
 
-export default function LibraryView({ books, sessions }: LibraryViewProps) {
+export default function LibraryView({ books, sessions, noteCounts }: LibraryViewProps) {
   const [showUpload, setShowUpload] = useState(false);
   const router = useRouter();
 
@@ -29,6 +30,7 @@ export default function LibraryView({ books, sessions }: LibraryViewProps) {
         key={books.map((book) => `${book.id}:${book.updated_at || book.last_read_at || book.created_at}`).join('|')}
         books={books}
         sessions={sessions}
+        noteCounts={noteCounts}
         onUploadClick={() => setShowUpload(true)}
       />
 

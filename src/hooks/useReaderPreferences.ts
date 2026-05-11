@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ReaderAmbienceId, ReaderAmbienceSettings, ReaderPreferences, ReaderSettings } from '@/types';
+import type {
+  ReaderAmbienceId,
+  ReaderAmbienceSettings,
+  ReaderPageTurnSoundSettings,
+  ReaderPreferences,
+  ReaderSettings,
+} from '@/types';
 
 const STORAGE_VERSION = 1;
 
@@ -22,6 +28,10 @@ const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
     ambience: 'off',
     volume: 0.34,
     enabled: false,
+  },
+  pageTurnSound: {
+    enabled: false,
+    volume: 0.16,
   },
 };
 
@@ -86,6 +96,20 @@ function normalizeAmbience(value: unknown): ReaderAmbienceSettings {
   };
 }
 
+function normalizePageTurnSound(value: unknown): ReaderPageTurnSoundSettings {
+  const candidate =
+    typeof value === 'object' && value ? (value as Partial<ReaderPageTurnSoundSettings>) : {};
+  const volume = typeof candidate.volume === 'number' ? candidate.volume : DEFAULT_READER_PREFERENCES.pageTurnSound.volume;
+
+  return {
+    enabled:
+      typeof candidate.enabled === 'boolean'
+        ? candidate.enabled
+        : DEFAULT_READER_PREFERENCES.pageTurnSound.enabled,
+    volume: Math.min(1, Math.max(0, volume)),
+  };
+}
+
 function normalizePreferences(value: unknown): ReaderPreferences {
   const candidate =
     typeof value === 'object' && value ? (value as Partial<ReaderPreferences> & { version?: number }) : {};
@@ -94,6 +118,7 @@ function normalizePreferences(value: unknown): ReaderPreferences {
     settings: normalizeSettings(candidate.settings),
     isPinned: typeof candidate.isPinned === 'boolean' ? candidate.isPinned : DEFAULT_READER_PREFERENCES.isPinned,
     ambience: normalizeAmbience(candidate.ambience),
+    pageTurnSound: normalizePageTurnSound(candidate.pageTurnSound),
   };
 }
 
@@ -154,15 +179,36 @@ export function useReaderPreferences(bookId: string) {
     }));
   }, []);
 
+  const setPageTurnSound = useCallback((pageTurnSound: Partial<ReaderPageTurnSoundSettings>) => {
+    setPreferences((prev) => ({
+      ...prev,
+      pageTurnSound: normalizePageTurnSound({
+        ...prev.pageTurnSound,
+        ...pageTurnSound,
+      }),
+    }));
+  }, []);
+
   return useMemo(
     () => ({
       settings: preferences.settings,
       isPinned: preferences.isPinned,
       ambience: preferences.ambience,
+      pageTurnSound: preferences.pageTurnSound,
       setSettings,
       setIsPinned,
       setAmbience,
+      setPageTurnSound,
     }),
-    [preferences.settings, preferences.isPinned, preferences.ambience, setSettings, setIsPinned, setAmbience]
+    [
+      preferences.settings,
+      preferences.isPinned,
+      preferences.ambience,
+      preferences.pageTurnSound,
+      setSettings,
+      setIsPinned,
+      setAmbience,
+      setPageTurnSound,
+    ]
   );
 }

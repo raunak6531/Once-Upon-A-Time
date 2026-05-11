@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { CloudRain, Flame, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
-import type { ReaderAmbienceId, ReaderAmbienceSettings } from '@/types';
+import type { ReaderAmbienceId, ReaderAmbienceSettings, ReaderPageTurnSoundSettings } from '@/types';
 
 interface AmbiencePopoverProps {
   ambience: ReaderAmbienceSettings;
   onAmbienceChange: (ambience: Partial<ReaderAmbienceSettings>) => void;
+  pageTurnSound: ReaderPageTurnSoundSettings;
+  onPageTurnSoundChange: (pageTurnSound: Partial<ReaderPageTurnSoundSettings>) => void;
 }
 
 const ambienceOptions: Array<{
@@ -18,7 +20,12 @@ const ambienceOptions: Array<{
   { id: 'fireplace', label: 'Fireplace', icon: Flame },
 ];
 
-export default function AmbiencePopover({ ambience, onAmbienceChange }: AmbiencePopoverProps) {
+export default function AmbiencePopover({
+  ambience,
+  onAmbienceChange,
+  pageTurnSound,
+  onPageTurnSoundChange,
+}: AmbiencePopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isPlaying = ambience.enabled && ambience.ambience !== 'off';
   const ActiveIcon = ambienceOptions.find((option) => option.id === ambience.ambience)?.icon || Volume2;
@@ -105,6 +112,44 @@ export default function AmbiencePopover({ ambience, onAmbienceChange }: Ambience
               className="h-1 w-full cursor-pointer accent-[var(--theme-accent)]"
             />
           </label>
+
+          <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--theme-accent)]">
+                  Page Turn
+                </p>
+                <p className="mt-1 text-xs opacity-60">A tiny paper tick on navigation.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onPageTurnSoundChange({ enabled: !pageTurnSound.enabled })}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+                  pageTurnSound.enabled
+                    ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-tint)] text-[var(--theme-accent)]'
+                    : 'border-[var(--theme-border)] hover:border-[var(--theme-accent)]'
+                }`}
+              >
+                {pageTurnSound.enabled ? 'On' : 'Off'}
+              </button>
+            </div>
+
+            <label className="block">
+              <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.16em] opacity-60">
+                <span>Volume</span>
+                <span>{Math.round(pageTurnSound.volume * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={0.5}
+                step={0.01}
+                value={pageTurnSound.volume}
+                onChange={(event) => onPageTurnSoundChange({ volume: Number(event.target.value) })}
+                className="h-1 w-full cursor-pointer accent-[var(--theme-accent)]"
+              />
+            </label>
+          </div>
         </div>
       )}
     </div>

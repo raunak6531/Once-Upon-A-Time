@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowDownNarrowWide,
   BookOpen,
+  CalendarDays,
   CheckCircle2,
   Clock,
+  FileText,
   Filter,
   Flame,
   Heart,
@@ -16,6 +18,7 @@ import {
   Search,
   Sparkles,
   Timer,
+  X,
   XCircle,
 } from 'lucide-react';
 import type { Book, ReadingSession, ReadingStatus } from '@/types';
@@ -25,6 +28,7 @@ import confetti from 'canvas-confetti';
 interface BookshelfLibraryProps {
   books: Book[];
   sessions: ReadingSession[];
+  noteCounts: Record<string, number>;
   onUploadClick: () => void;
 }
 
@@ -91,7 +95,7 @@ function calculateStreak(sessions: ReadingSession[]) {
 }
 
 
-export default function BookshelfLibrary({ books, sessions, onUploadClick }: BookshelfLibraryProps) {
+export default function BookshelfLibrary({ books, sessions, noteCounts, onUploadClick }: BookshelfLibraryProps) {
   const router = useRouter();
   const [libraryBooks, setLibraryBooks] = useState<Book[]>(books);
   const [query, setQuery] = useState('');
@@ -100,6 +104,7 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [activeCover, setActiveCover] = useState<string | null>(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
 
 
   const stats = useMemo(() => {
@@ -137,6 +142,7 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
   }, [favoriteOnly, libraryBooks, query, sort, statusFilter]);
 
   const lastAdded = libraryBooks[0];
+  const selectedBook = selectedBookId ? libraryBooks.find((book) => book.id === selectedBookId) || null : null;
 
   const handleHover = useCallback((cover: string | null) => setActiveCover(cover), []);
   const open = useCallback((id: string) => router.push(`/read/${id}`), [router]);
@@ -337,12 +343,22 @@ export default function BookshelfLibrary({ books, sessions, onUploadClick }: Boo
                 index={i}
                 onHover={handleHover}
                 onOpen={open}
+                onDetails={setSelectedBookId}
                 onUpdate={updateBook}
               />
             ))}
           </div>
         )}
       </main>
+      {selectedBook && (
+        <BookDetailsDrawer
+          book={selectedBook}
+          noteCount={noteCounts[selectedBook.id] || 0}
+          onClose={() => setSelectedBookId(null)}
+          onOpen={open}
+          onUpdate={updateBook}
+        />
+      )}
     </div>
   );
 }
@@ -523,10 +539,11 @@ interface CardProps {
   index: number;
   onHover: (cover: string | null) => void;
   onOpen: (id: string) => void;
+  onDetails: (id: string) => void;
   onUpdate: (bookId: string, update: Partial<Book>) => void;
 }
 
-function SleekBookCard({ book, index, onHover, onOpen, onUpdate }: CardProps) {
+function SleekBookCard({ book, index, onHover, onOpen, onDetails, onUpdate }: CardProps) {
   const reading = statusFor(book) === 'reading';
   const spine = spineFor(book);
   const progress = Math.max(0, Math.min(100, Number(book.progress_percent || 0)));
@@ -570,7 +587,9 @@ function SleekBookCard({ book, index, onHover, onOpen, onUpdate }: CardProps) {
 
       <div className="sleek-book-meta">
         <div className="sleek-book-title-row">
-          <h3 className="sleek-book-title">{book.title}</h3>
+          <button type="button" className="book-details-trigger" onClick={() => onDetails(book.id)}>
+            <h3 className="sleek-book-title">{book.title}</h3>
+          </button>
           <button
             type="button"
             className={`book-favorite-btn${book.is_favorite ? ' is-active' : ''}`}
@@ -580,7 +599,12 @@ function SleekBookCard({ book, index, onHover, onOpen, onUpdate }: CardProps) {
             <Heart className="w-4 h-4" />
           </button>
         </div>
-        {book.author && <p className="sleek-book-author">{book.author}</p>}
+        <button type="button" className="book-details-trigger book-details-trigger-body" onClick={() => onDetails(book.id)}>
+          {book.author && <p className="sleek-book-author">{book.author}</p>}
+          <div className="book-progress-track" aria-label={`${progress}% complete`}>
+            <span style={{ width: `${progress}%` }} />
+          </div>
+        </button>
         <div className="book-card-controls">
           <div className="status-picker">
             <button
@@ -619,6 +643,116 @@ function SleekBookCard({ book, index, onHover, onOpen, onUpdate }: CardProps) {
           <span className="sleek-book-status">{progress}%</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function BookDetailsDrawer({
+  book,
+  noteCount,
+  onClose,
+  onOpen,
+  onUpdate,
+}: {
+  book: Book;
+  noteCount: number;
+  onClose: () => void;
+  onOpen: (id: string) => void;
+  onUpdate: (bookId: string, update: Partial<Book>) => void;
+}) {
+  const progress = Math.max(0, Math.min(100, Number(book.progress_percent || 0)));
+  const totalSeconds = Number(book.total_reading_seconds || 0);
+  const lastRead = book.last_read_at ? new Date(book.last_read_at).toLocaleDateString() : 'Not started';
+  const finishedAt = book.finished_at ? new Date(book.finished_at).toLocaleDateString() : null;
+
+  return (
+    <div className="book-details-backdrop" onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <aside className="book-details-drawer" aria-label={`${book.title} details`}>
+        <div className="book-details-cover-glow" style={book.cover_url ? { backgroundImage: `url(${book.cover_url})` } : undefined} />
+        <div className="book-details-header">
+          <button type="button" className="book-details-close" onClick={onClose} aria-label="Close details">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="book-details-hero">
+          <div className="book-details-cover">
+            {book.cover_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={book.cover_url} alt="" />
+            ) : (
+              <div className="sleek-book-placeholder">
+                <BookOpen className="w-8 h-8" />
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="book-details-kicker">{STATUS_LABELS[statusFor(book)]}</p>
+            <h2>{book.title}</h2>
+            <p>{book.author || 'Unknown Author'}</p>
+          </div>
+        </div>
+
+        <div className="book-details-progress">
+          <div className="book-details-progress-head">
+            <span>{progress}% complete</span>
+            <span>{formatDuration(totalSeconds)} read</span>
+          </div>
+          <div className="book-details-progress-track">
+            <span style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+
+        <div className="book-details-stats">
+          <DetailStat icon={Clock} label="Reading time" value={formatDuration(totalSeconds)} />
+          <DetailStat icon={CalendarDays} label="Last read" value={lastRead} />
+          <DetailStat icon={FileText} label="Notes" value={noteCount.toString()} />
+          <DetailStat icon={CheckCircle2} label="Finished" value={finishedAt || 'Not yet'} />
+        </div>
+
+        <div className="book-details-section">
+          <p>Status</p>
+          <div className="book-details-status-grid">
+            {(['want_to_read', 'reading', 'finished', 'dnf'] as ReadingStatus[]).map((status) => (
+              <button
+                key={status}
+                type="button"
+                className={`book-details-status${statusFor(book) === status ? ' is-active' : ''}`}
+                onClick={() => onUpdate(book.id, { reading_status: status })}
+              >
+                {STATUS_LABELS[status]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="book-details-actions">
+          <button
+            type="button"
+            className={`book-details-favorite${book.is_favorite ? ' is-active' : ''}`}
+            onClick={() => onUpdate(book.id, { is_favorite: !book.is_favorite })}
+          >
+            <Heart className="w-4 h-4" />
+            {book.is_favorite ? 'Favorited' : 'Favorite'}
+          </button>
+          <button type="button" className="btn-3d btn-3d-amber book-details-read" onClick={() => onOpen(book.id)}>
+            <BookOpen className="w-4 h-4" />
+            Read
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function DetailStat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="book-details-stat">
+      <Icon className="w-4 h-4" />
+      <span>
+        <em>{label}</em>
+        <strong>{value}</strong>
+      </span>
     </div>
   );
 }

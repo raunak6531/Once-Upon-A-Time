@@ -30,6 +30,11 @@ export default async function LibraryPage() {
     .order('started_at', { ascending: false })
     .limit(180);
 
+  const { data: highlightRows, error: highlightsError } = await supabase
+    .from('highlights')
+    .select('book_id')
+    .eq('user_id', user.id);
+
   if (error) {
     console.error('Failed to fetch books:', error);
   }
@@ -38,7 +43,18 @@ export default async function LibraryPage() {
     console.error('Failed to fetch reading sessions:', sessionsError);
   }
 
-  const signedBooks = await Promise.all(((books as Book[]) || []).map(hydrateSignedBookAssets));
+  if (highlightsError) {
+    console.error('Failed to fetch note counts:', highlightsError);
+  }
 
-  return <LibraryView books={signedBooks} sessions={(sessions as ReadingSession[]) || []} />;
+  const signedBooks = await Promise.all(((books as Book[]) || []).map(hydrateSignedBookAssets));
+  const noteCounts = ((highlightRows as Array<{ book_id: string }> | null) || []).reduce<Record<string, number>>(
+    (counts, row) => ({
+      ...counts,
+      [row.book_id]: (counts[row.book_id] || 0) + 1,
+    }),
+    {}
+  );
+
+  return <LibraryView books={signedBooks} sessions={(sessions as ReadingSession[]) || []} noteCounts={noteCounts} />;
 }

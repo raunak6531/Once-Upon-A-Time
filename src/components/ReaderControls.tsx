@@ -8,6 +8,7 @@ import SettingsPopover from './SettingsPopover';
 import AmbiencePopover from './AmbiencePopover';
 import { useBookProgress } from '@/hooks/useBookProgress';
 import { useAmbientSound } from '@/hooks/useAmbientSound';
+import { usePageTurnSound } from '@/hooks/usePageTurnSound';
 import { useReaderPreferences } from '@/hooks/useReaderPreferences';
 import { useReadingSession } from '@/hooks/useReadingSession';
 import type { EpubReaderRef } from './EpubReader';
@@ -66,8 +67,18 @@ export default function ReaderControls({
   const router = useRouter();
   const readerRef = useRef<EpubReaderRef>(null);
   const { saveCfi } = useBookProgress(bookId, initialCfi);
-  const { settings, isPinned, ambience, setSettings, setIsPinned, setAmbience } = useReaderPreferences(bookId);
+  const {
+    settings,
+    isPinned,
+    ambience,
+    pageTurnSound,
+    setSettings,
+    setIsPinned,
+    setAmbience,
+    setPageTurnSound,
+  } = useReaderPreferences(bookId);
   useAmbientSound(ambience);
+  const playPageTurn = usePageTurnSound(pageTurnSound);
 
   const [progress, setProgress] = useState(Math.round(initialProgressPercent || 0));
   const [isReaderReady, setIsReaderReady] = useState(false);
@@ -169,9 +180,11 @@ export default function ReaderControls({
 
       switch (e.key) {
         case 'ArrowLeft':
+          playPageTurn();
           readerRef.current?.prevPage();
           break;
         case 'ArrowRight':
+          playPageTurn();
           readerRef.current?.nextPage();
           break;
         case 't':
@@ -200,7 +213,19 @@ export default function ReaderControls({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [playPageTurn]);
+
+  const goToPreviousPage = useCallback(() => {
+    recordActivity();
+    playPageTurn();
+    readerRef.current?.prevPage();
+  }, [playPageTurn, recordActivity]);
+
+  const goToNextPage = useCallback(() => {
+    recordActivity();
+    playPageTurn();
+    readerRef.current?.nextPage();
+  }, [playPageTurn, recordActivity]);
 
   const handleRelocated = useCallback(
     (cfi: string, progressPercent: number) => {
@@ -442,17 +467,11 @@ export default function ReaderControls({
       <div className="absolute inset-0 z-10 pointer-events-none">
         <div 
           className="absolute inset-y-0 left-0 w-16 sm:w-24 cursor-pointer pointer-events-auto" 
-          onClick={() => {
-            recordActivity();
-            readerRef.current?.prevPage();
-          }}
+          onClick={goToPreviousPage}
         />
         <div 
           className="absolute inset-y-0 right-0 w-16 sm:w-24 cursor-pointer pointer-events-auto" 
-          onClick={() => {
-            recordActivity();
-            readerRef.current?.nextPage();
-          }}
+          onClick={goToNextPage}
         />
       </div>
 
@@ -543,7 +562,12 @@ export default function ReaderControls({
           >
             <Search className="w-5 h-5" />
           </button>
-          <AmbiencePopover ambience={ambience} onAmbienceChange={setAmbience} />
+          <AmbiencePopover
+            ambience={ambience}
+            onAmbienceChange={setAmbience}
+            pageTurnSound={pageTurnSound}
+            onPageTurnSoundChange={setPageTurnSound}
+          />
           <SettingsPopover
             settings={settings}
             onSettingsChange={handleSettingsChange}
@@ -761,10 +785,7 @@ export default function ReaderControls({
           
           <div className="flex justify-center items-center gap-8 pt-2">
              <button 
-              onClick={() => {
-                recordActivity();
-                readerRef.current?.prevPage();
-              }}
+              onClick={goToPreviousPage}
               className="p-2 text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)] transition-colors"
              >
                <ChevronLeft className="w-6 h-6" />
@@ -773,10 +794,7 @@ export default function ReaderControls({
                <Share2 className="w-5 h-5" />
              </button>
              <button 
-              onClick={() => {
-                recordActivity();
-                readerRef.current?.nextPage();
-              }}
+              onClick={goToNextPage}
               className="p-2 text-[var(--theme-text-secondary)] hover:text-[var(--theme-accent)] transition-colors"
              >
                <ChevronRight className="w-6 h-6" />

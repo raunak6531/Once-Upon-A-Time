@@ -51,10 +51,16 @@ export interface ReaderAmbienceSettings {
   enabled: boolean;
 }
 
+export interface ReaderPageTurnSoundSettings {
+  enabled: boolean;
+  volume: number;
+}
+
 export interface ReaderPreferences {
   settings: ReaderSettings;
   isPinned: boolean;
   ambience: ReaderAmbienceSettings;
+  pageTurnSound: ReaderPageTurnSoundSettings;
 }
 
 export interface ReaderBookmark {
