@@ -16,7 +16,7 @@ interface EpubReaderProps {
   onHighlightClick?: (highlight: ReaderHighlight) => void;
 }
 
-type ThemeStyleValue = string | number | Record<string, string | number>;
+type ThemeStyleValue = string | number | { [key: string]: ThemeStyleValue };
 type ThemeStyles = Record<string, ThemeStyleValue>;
 
 interface RenditionLocation {
@@ -303,9 +303,13 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
 
       const lineHeightValue =
         settings.lineHeight === 'compact' ? 1.4 : settings.lineHeight === 'relaxed' ? 2.2 : 1.8;
+      const mobileLineHeightValue =
+        settings.lineHeight === 'compact' ? 1.48 : settings.lineHeight === 'relaxed' ? 2 : 1.72;
 
       const marginValue =
         settings.margin === 'narrow' ? '5%' : settings.margin === 'wide' ? '25%' : '15%';
+      const mobileMarginValue =
+        settings.margin === 'narrow' ? '18px' : settings.margin === 'wide' ? '32px' : '24px';
 
       const baseStyles: ThemeStyles = {
         '::selection': {
@@ -356,6 +360,19 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
           'max-width': '100% !important',
           height: 'auto !important',
           'border-radius': '8px !important',
+        },
+        '@media (max-width: 640px)': {
+          html: {
+            '-webkit-text-size-adjust': '100%',
+          },
+          body: {
+            padding: `26px ${mobileMarginValue} 34px !important`,
+            'line-height': `${mobileLineHeightValue} !important`,
+          },
+          'p, li, blockquote': {
+            'margin-top': '0.65em !important',
+            'margin-bottom': '0.65em !important',
+          },
         },
       };
 

@@ -56,6 +56,7 @@ export default async function ReadPage({ params }: ReadPageProps) {
         coverUrl={typedBook.cover_url}
         initialProgressPercent={typedBook.progress_percent}
         initialTotalReadingSeconds={typedBook.total_reading_seconds}
+        initialReadingStatus={typedBook.reading_status}
       />
     </div>
   );

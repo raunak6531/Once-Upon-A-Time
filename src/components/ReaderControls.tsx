@@ -12,7 +12,7 @@ import { usePageTurnSound } from '@/hooks/usePageTurnSound';
 import { useReaderPreferences } from '@/hooks/useReaderPreferences';
 import { useReadingSession } from '@/hooks/useReadingSession';
 import type { EpubReaderRef } from './EpubReader';
-import type { ReaderBookmark, ReaderHighlight, ReaderSearchResult, ReaderSettings, TocEntry } from '@/types';
+import type { ReaderBookmark, ReaderHighlight, ReaderSearchResult, ReaderSettings, ReadingStatus, TocEntry } from '@/types';
 import { extractPaletteFromImage } from '@/lib/colorExtraction';
 import { OUATLogo } from './OUATLogo';
 import ReaderSidebar from './ReaderSidebar';
@@ -53,6 +53,7 @@ interface ReaderControlsProps {
   coverUrl?: string | null;
   initialProgressPercent?: number | null;
   initialTotalReadingSeconds?: number | null;
+  initialReadingStatus?: ReadingStatus | null;
 }
 
 export default function ReaderControls({
@@ -63,10 +64,14 @@ export default function ReaderControls({
   coverUrl,
   initialProgressPercent,
   initialTotalReadingSeconds,
+  initialReadingStatus,
 }: ReaderControlsProps) {
   const router = useRouter();
   const readerRef = useRef<EpubReaderRef>(null);
-  const { saveCfi, flushProgress } = useBookProgress(bookId, initialCfi);
+  const { saveCfi, flushProgress } = useBookProgress(bookId, initialCfi, {
+    initialProgressPercent,
+    initialReadingStatus,
+  });
   const {
     settings,
     isPinned,
