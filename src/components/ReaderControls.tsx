@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, ChevronLeft, ChevronRight, Bookmark, ChevronsUp, Highlighter, List, Search, Share2, StickyNote, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Bookmark, ChevronsUp, Highlighter, List, MoreHorizontal, Search, Share2, StickyNote, Volume2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SettingsPopover from './SettingsPopover';
 import AmbiencePopover from './AmbiencePopover';
@@ -98,6 +98,7 @@ export default function ReaderControls({
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [pendingHighlight, setPendingHighlight] = useState<{ cfi: string; text: string } | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [currentChapter, setCurrentChapter] = useState('');
@@ -108,6 +109,7 @@ export default function ReaderControls({
   const [dictError, setDictError] = useState<string | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const lastPointerTypeRef = useRef<string | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
   const searchRequestRef = useRef(0);
   const { recordActivity, flushActivity } = useReadingSession(bookId, progress, isReaderReady);
 
@@ -160,6 +162,17 @@ export default function ReaderControls({
       clearTimeout(hideTimerRef.current);
     };
   }, [isPinned]);
+
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   // Color extraction from cover
   useEffect(() => {
@@ -504,7 +517,7 @@ export default function ReaderControls({
 
       {/* Top Navigation Bar */}
       <div
-        className="absolute top-0 left-0 right-0 z-30 px-6 py-4 flex items-center justify-between transition-all duration-500"
+        className="absolute top-0 left-0 right-0 z-30 px-3 py-3 sm:px-6 sm:py-4 flex items-center justify-between transition-all duration-500"
         style={{
           transform: showControls ? 'translateY(0)' : 'translateY(-100%)',
           opacity: showControls ? 1 : 0,
@@ -515,7 +528,7 @@ export default function ReaderControls({
         <div className="flex items-center gap-4">
           <button
             onClick={returnToLibrary}
-            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border border-[var(--theme-border)]"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border border-[var(--theme-border)]"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -530,14 +543,14 @@ export default function ReaderControls({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button 
             onClick={() => {
               const nextPinned = !isPinned;
               setIsPinned(nextPinned);
               if (nextPinned) setShowControls(true);
             }}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 border ${
+            className={`hidden sm:flex w-10 h-10 rounded-xl items-center justify-center transition-all duration-300 border ${
               isPinned 
                 ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]' 
                 : 'hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border-[var(--theme-border)]'
@@ -548,7 +561,7 @@ export default function ReaderControls({
           </button>
           <button 
             onClick={toggleBookmark}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 border ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all duration-300 border ${
               bookmarks.find(b => b.cfi === currentCfi)
                 ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]'
                 : 'hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border-[var(--theme-border)]'
@@ -561,7 +574,7 @@ export default function ReaderControls({
               setSidebarTab('toc');
               setIsSidebarOpen(true);
             }}
-            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border border-[var(--theme-border)]"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border border-[var(--theme-border)]"
           >
             <List className="w-5 h-5" />
           </button>
@@ -570,7 +583,7 @@ export default function ReaderControls({
               setSidebarTab('notes');
               setIsSidebarOpen(true);
             }}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 border ${
+            className={`hidden sm:flex w-10 h-10 rounded-xl items-center justify-center transition-all duration-300 border ${
               highlights.length > 0
                 ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]'
                 : 'hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border-[var(--theme-border)]'
@@ -584,22 +597,84 @@ export default function ReaderControls({
               setSidebarTab('search');
               setIsSidebarOpen(true);
             }}
-            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border border-[var(--theme-border)]"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border border-[var(--theme-border)]"
             title="Search"
           >
             <Search className="w-5 h-5" />
           </button>
-          <AmbiencePopover
-            ambience={ambience}
-            onAmbienceChange={setAmbience}
-            pageTurnSound={pageTurnSound}
-            onPageTurnSoundChange={setPageTurnSound}
-          />
+          <div className="hidden sm:block">
+            <AmbiencePopover
+              ambience={ambience}
+              onAmbienceChange={setAmbience}
+              pageTurnSound={pageTurnSound}
+              onPageTurnSoundChange={setPageTurnSound}
+            />
+          </div>
           <SettingsPopover
             settings={settings}
             onSettingsChange={handleSettingsChange}
             suggestedColors={palette}
           />
+          <div className="relative sm:hidden" ref={mobileMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen((value) => !value)}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 border ${
+                isMobileMenuOpen
+                  ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]'
+                  : 'hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border-[var(--theme-border)]'
+              }`}
+              title="More reader tools"
+              aria-label="More reader tools"
+              aria-expanded={isMobileMenuOpen}
+            >
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+
+            {isMobileMenuOpen && (
+              <div
+                className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)]/95 p-2 text-[var(--theme-text)] shadow-2xl backdrop-blur-xl"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextPinned = !isPinned;
+                    setIsPinned(nextPinned);
+                    if (nextPinned) setShowControls(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors hover:bg-white/10"
+                >
+                  {isPinned ? <Pin className="w-4 h-4 text-[var(--theme-accent)]" /> : <PinOff className="w-4 h-4 opacity-60" />}
+                  <span>{isPinned ? 'Unpin Controls' : 'Pin Controls'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidebarTab('notes');
+                    setIsSidebarOpen(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors hover:bg-white/10"
+                >
+                  <StickyNote className={`w-4 h-4 ${highlights.length > 0 ? 'text-[var(--theme-accent)]' : 'opacity-60'}`} />
+                  <span>Notes</span>
+                </button>
+                <div className="mt-1 flex min-h-11 items-center justify-between rounded-xl px-3">
+                  <span className="flex items-center gap-3 text-sm font-semibold">
+                    <Volume2 className="w-4 h-4 opacity-60" />
+                    Ambience
+                  </span>
+                  <AmbiencePopover
+                    ambience={ambience}
+                    onAmbienceChange={setAmbience}
+                    pageTurnSound={pageTurnSound}
+                    onPageTurnSoundChange={setPageTurnSound}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

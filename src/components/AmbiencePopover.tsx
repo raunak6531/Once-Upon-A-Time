@@ -39,7 +39,7 @@ export default function AmbiencePopover({
       <button
         type="button"
         onClick={() => setIsOpen((value) => !value)}
-        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 border ${
+        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all duration-300 border ${
           isPlaying
             ? 'bg-[var(--theme-accent)] text-black border-[var(--theme-accent)]'
             : 'hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border-[var(--theme-border)]'

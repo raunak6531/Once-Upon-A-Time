@@ -57,7 +57,7 @@ export default function SettingsPopover({ settings, onSettingsChange, suggestedC
       <button
         id="settings-btn"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 group"
+        className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all duration-300 group"
         style={{
           background: isOpen ? 'var(--theme-accent)' : 'var(--theme-surface)',
           color: isOpen ? 'white' : 'var(--theme-text)',
@@ -72,7 +72,8 @@ export default function SettingsPopover({ settings, onSettingsChange, suggestedC
         <div
           className="popover glass overflow-y-auto max-h-[85vh] scrollbar-hide"
           style={{
-            minWidth: '320px',
+            width: 'min(320px, calc(100vw - 1.5rem))',
+            minWidth: 'min(320px, calc(100vw - 1.5rem))',
             padding: '1.5rem',
             right: 0,
             marginTop: '0.75rem',
