@@ -318,10 +318,13 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
         },
         html: {
           'font-size': `${settings.fontSize}% !important`,
+          background: `${bgColor} !important`,
+          'box-shadow': 'none !important',
         },
         body: {
           color: `${textColor} !important`,
           background: `${bgColor} !important`,
+          'box-shadow': 'none !important',
           'line-height': `${lineHeightValue} !important`,
           'font-size': '100% !important', // Let it inherit from html
           padding: `40px ${marginValue} !important`,

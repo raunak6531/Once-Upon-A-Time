@@ -66,7 +66,7 @@ export default function ReaderControls({
 }: ReaderControlsProps) {
   const router = useRouter();
   const readerRef = useRef<EpubReaderRef>(null);
-  const { saveCfi } = useBookProgress(bookId, initialCfi);
+  const { saveCfi, flushProgress } = useBookProgress(bookId, initialCfi);
   const {
     settings,
     isPinned,
@@ -104,7 +104,7 @@ export default function ReaderControls({
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const lastPointerTypeRef = useRef<string | null>(null);
   const searchRequestRef = useRef(0);
-  const { recordActivity } = useReadingSession(bookId, progress, isReaderReady);
+  const { recordActivity, flushActivity } = useReadingSession(bookId, progress, isReaderReady);
 
   // Auto-hide controls after inactivity
   const resetHideTimer = useCallback(() => {
@@ -242,6 +242,12 @@ export default function ReaderControls({
     readerRef.current?.nextPage();
     settleControlsAfterPageTurn();
   }, [playPageTurn, recordActivity, settleControlsAfterPageTurn]);
+
+  const returnToLibrary = useCallback(async () => {
+    await Promise.all([flushProgress(), flushActivity()]);
+    router.push('/library');
+    router.refresh();
+  }, [flushActivity, flushProgress, router]);
 
   const handleRelocated = useCallback(
     (cfi: string, progressPercent: number) => {
@@ -503,7 +509,7 @@ export default function ReaderControls({
       >
         <div className="flex items-center gap-4">
           <button
-            onClick={() => router.push('/library')}
+            onClick={returnToLibrary}
             className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:bg-[var(--theme-surface)] text-[var(--theme-text)] border border-[var(--theme-border)]"
           >
             <ArrowLeft className="w-5 h-5" />

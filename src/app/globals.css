@@ -581,14 +581,27 @@ input:-webkit-autofill:focus {
 /* Ensure the epubjs iframe fills its container */
 #epub-viewer {
   position: relative;
+  background: var(--theme-bg) !important;
+  box-shadow: none !important;
 }
 
 #epub-viewer iframe {
   border: none !important;
+  background: var(--theme-bg) !important;
+  box-shadow: none !important;
 }
 
 #epub-viewer > div {
   overflow: hidden !important;
+  background: var(--theme-bg) !important;
+  box-shadow: none !important;
+}
+
+#epub-viewer .epub-view,
+#epub-viewer .epub-container {
+  background: var(--theme-bg) !important;
+  box-shadow: none !important;
+  border: 0 !important;
 }
 
 .reader-nav-btn {

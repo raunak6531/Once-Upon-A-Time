@@ -110,5 +110,5 @@ export function useReadingSession(bookId: string, progress: number, enabled: boo
     };
   }, [enabled, flush, recordActivity, startSegment]);
 
-  return { recordActivity };
+  return { recordActivity, flushActivity: flush };
 }

@@ -117,7 +117,11 @@ export async function recordReadingSession(input: ReadingSessionInput) {
 
   const currentTotal = Number(existingBook?.total_reading_seconds || 0);
   const progressEnd = Math.max(0, Math.min(100, Math.round(input.progressEnd)));
-  const shouldMarkReading = !existingBook?.reading_status && progressEnd > 0 && progressEnd < 96;
+  const shouldMarkReading =
+    progressEnd > 0 &&
+    progressEnd < 96 &&
+    existingBook?.reading_status !== 'reading' &&
+    existingBook?.reading_status !== 'finished';
   const shouldMarkFinished = progressEnd >= 96 && existingBook?.reading_status !== 'finished';
 
   const bookUpdate: Partial<Book> = {
