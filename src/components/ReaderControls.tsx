@@ -102,6 +102,7 @@ export default function ReaderControls({
   const [isDictLoading, setIsDictLoading] = useState(false);
   const [dictError, setDictError] = useState<string | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const lastPointerTypeRef = useRef<string | null>(null);
   const searchRequestRef = useRef(0);
   const { recordActivity } = useReadingSession(bookId, progress, isReaderReady);
 
@@ -123,6 +124,23 @@ export default function ReaderControls({
     resetHideTimer();
   }, [isPinned, resetHideTimer]);
 
+  const handleReaderPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    lastPointerTypeRef.current = event.pointerType;
+
+    if (event.pointerType === 'mouse') {
+      revealControls();
+    }
+  }, [revealControls]);
+
+  const settleControlsAfterPageTurn = useCallback(() => {
+    if (isPinned || lastPointerTypeRef.current === 'mouse') {
+      return;
+    }
+
+    clearTimeout(hideTimerRef.current);
+    setShowControls(false);
+  }, [isPinned]);
+
   useEffect(() => {
     if (isPinned) {
       return;
@@ -132,15 +150,11 @@ export default function ReaderControls({
     hideTimerRef.current = setTimeout(() => {
       setShowControls(false);
     }, 4000);
-    const handleTouch = () => resetHideTimer();
-
-    window.addEventListener('touchstart', handleTouch);
 
     return () => {
-      window.removeEventListener('touchstart', handleTouch);
       clearTimeout(hideTimerRef.current);
     };
-  }, [resetHideTimer, isPinned]);
+  }, [isPinned]);
 
   // Color extraction from cover
   useEffect(() => {
@@ -219,13 +233,15 @@ export default function ReaderControls({
     recordActivity();
     playPageTurn();
     readerRef.current?.prevPage();
-  }, [playPageTurn, recordActivity]);
+    settleControlsAfterPageTurn();
+  }, [playPageTurn, recordActivity, settleControlsAfterPageTurn]);
 
   const goToNextPage = useCallback(() => {
     recordActivity();
     playPageTurn();
     readerRef.current?.nextPage();
-  }, [playPageTurn, recordActivity]);
+    settleControlsAfterPageTurn();
+  }, [playPageTurn, recordActivity, settleControlsAfterPageTurn]);
 
   const handleRelocated = useCallback(
     (cfi: string, progressPercent: number) => {
@@ -429,8 +445,8 @@ export default function ReaderControls({
   return (
     <div
       className="reader-container transition-colors duration-500"
-      onPointerMove={revealControls}
-      onPointerDown={revealControls}
+      onPointerMove={handleReaderPointer}
+      onPointerDown={handleReaderPointer}
       style={{ 
         ...themeVars,
         backgroundColor: 'var(--theme-bg)'
