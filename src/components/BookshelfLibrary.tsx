@@ -50,6 +50,16 @@ function spineFor(book: Book): string {
   return SPINE_PALETTE[h % SPINE_PALETTE.length];
 }
 
+function isValidImageUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return (
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('data:') ||
+    url.startsWith('/')
+  );
+}
+
 function statusFor(book: Book): ReadingStatus {
   if (book.reading_status) return book.reading_status;
   return book.current_cfi ? 'reading' : 'want_to_read';
@@ -204,7 +214,7 @@ export default function BookshelfLibrary({
     [filtered]
   );
   const wantToRead = useMemo(
-    () => filtered.filter((b) => statusFor(b) === 'want_to_read' || statusFor(b) === 'dnf'),
+    () => filtered.filter((b) => statusFor(b) !== 'reading' && statusFor(b) !== 'finished'),
     [filtered]
   );
   const finished = useMemo(
@@ -384,15 +394,15 @@ export default function BookshelfLibrary({
                 }}
               />
               <div className="relative w-[200px] h-[300px] rounded-[6px] overflow-hidden shadow-[inset_3px_0_0_rgba(255,255,255,0.12),0_32px_60px_-16px_rgba(0,0,0,0.7)] after:absolute after:inset-0 after:rounded-[6px] after:pointer-events-none after:shadow-[inset_3px_0_0_rgba(255,255,255,0.12)]">
-                {heroBook.cover_url ? (
+                {isValidImageUrl(heroBook.cover_url) ? (
                   <Image
-                    src={heroBook.cover_url}
+                    src={heroBook.cover_url!}
                     alt={heroBook.title}
                     fill
                     sizes="200px"
                     priority
                     className="object-cover rounded-[6px]"
-                    unoptimized={heroBook.cover_url.startsWith('data:')}
+                    unoptimized
                   />
                 ) : (
                   <div
@@ -851,14 +861,14 @@ function BookCard({
           color: '#fff3e6',
         }}
       >
-        {book.cover_url ? (
+        {isValidImageUrl(book.cover_url) ? (
           <Image
-            src={book.cover_url}
+            src={book.cover_url!}
             alt={book.title}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
             className="object-cover rounded-[6px]"
-            unoptimized={book.cover_url.startsWith('data:')}
+            unoptimized
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-3 text-center">
@@ -1024,14 +1034,14 @@ function BookDetailsDrawer({
 
         <div className="book-details-hero">
           <div className="book-details-cover">
-            {book.cover_url ? (
+            {isValidImageUrl(book.cover_url) ? (
               <Image
-                src={book.cover_url}
+                src={book.cover_url!}
                 alt={book.title}
                 fill
                 sizes="120px"
                 className="object-cover rounded-[6px]"
-                unoptimized={book.cover_url.startsWith('data:')}
+                unoptimized
               />
             ) : (
               <div

@@ -40,19 +40,24 @@ async function createSignedAssetUrl(
 ) {
   if (!value) return null;
 
-  const path = extractStoragePath(value, bucket);
-  if (!path) {
+  try {
+    const path = extractStoragePath(value, bucket);
+    if (!path) {
+      return value;
+    }
+
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+
+    if (error) {
+      console.warn(`Could not sign ${bucket} asset (using raw path):`, error.message);
+      return value;
+    }
+
+    return data?.signedUrl || value;
+  } catch (err) {
+    console.warn(`Exception signing ${bucket} asset:`, err);
     return value;
   }
-
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
-
-  if (error) {
-    console.error(`Failed to sign ${bucket} asset:`, error);
-    return null;
-  }
-
-  return data.signedUrl;
 }
 
 export async function hydrateSignedBookAssets(
@@ -68,6 +73,6 @@ export async function hydrateSignedBookAssets(
   return {
     ...book,
     epub_file_url: epubUrl || book.epub_file_url,
-    cover_url: coverUrl,
+    cover_url: coverUrl || book.cover_url,
   };
 }

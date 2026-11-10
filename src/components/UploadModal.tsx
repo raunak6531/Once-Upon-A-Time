@@ -141,8 +141,20 @@ export default function UploadModal({ onClose, onUploadComplete }: UploadModalPr
       // Clean up the book
       book.destroy();
 
+      const hydratedBook = { ...(newBook as Book) };
+      try {
+        if (coverUrl) {
+          const { data: signedCover } = await supabase.storage.from('covers').createSignedUrl(coverUrl, 3600);
+          if (signedCover?.signedUrl) {
+            hydratedBook.cover_url = signedCover.signedUrl;
+          }
+        }
+      } catch {
+        // Fallback to existing cover_url
+      }
+
       setTimeout(() => {
-        onUploadComplete(newBook as Book);
+        onUploadComplete(hydratedBook);
       }, 1000);
 
     } catch (err: unknown) {

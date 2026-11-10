@@ -4,6 +4,9 @@ import { redirect } from 'next/navigation';
 import type { Book, ReadingSession } from '@/types';
 import LibraryView from '@/components/LibraryView';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata = {
   title: 'My Library — Once Upon A Time',
   description: 'Browse and manage your EPUB book collection.',
@@ -18,13 +21,13 @@ export default async function LibraryPage() {
   }
 
   const [
-    { data: books, error },
+    booksResult,
     { data: sessions, error: sessionsError },
     { data: highlightRows, error: highlightsError },
   ] = await Promise.all([
     supabase
       .from('books')
-      .select('id,user_id,title,author,cover_url,epub_file_url,current_cfi,reading_status,is_favorite,tags,progress_percent,last_read_at,finished_at,total_reading_seconds,setting_location,setting_lat,setting_lng,created_at,updated_at')
+      .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
     supabase
@@ -39,8 +42,8 @@ export default async function LibraryPage() {
       .eq('user_id', user.id),
   ]);
 
-  if (error) {
-    console.error('Failed to fetch books:', error);
+  if (booksResult.error) {
+    console.error('Failed to fetch books from Supabase:', booksResult.error);
   }
 
   if (sessionsError) {
@@ -51,12 +54,21 @@ export default async function LibraryPage() {
     console.error('Failed to fetch note counts:', highlightsError);
   }
 
-  const signedBooks = await Promise.all(((books as Book[]) || []).map((book) => hydrateSignedBookAssets(book, supabase)));
+  const books = (booksResult.data as Book[]) || [];
+  const signedBooks = await Promise.all(
+    books.map((book) => hydrateSignedBookAssets(book, supabase))
+  );
 
   const noteCounts: Record<string, number> = {};
   for (const row of (highlightRows as Array<{ book_id: string }> | null) || []) {
     noteCounts[row.book_id] = (noteCounts[row.book_id] || 0) + 1;
   }
 
-  return <LibraryView books={signedBooks} sessions={(sessions as ReadingSession[]) || []} noteCounts={noteCounts} />;
+  return (
+    <LibraryView
+      books={signedBooks}
+      sessions={(sessions as ReadingSession[]) || []}
+      noteCounts={noteCounts}
+    />
+  );
 }
