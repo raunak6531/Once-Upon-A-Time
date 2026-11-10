@@ -27,7 +27,6 @@ export default function LibraryView({ books, sessions, noteCounts }: LibraryView
       </div>
 
       <BookshelfLibrary
-        key={books.map((book) => `${book.id}:${book.updated_at || book.last_read_at || book.created_at}`).join('|')}
         books={books}
         sessions={sessions}
         noteCounts={noteCounts}

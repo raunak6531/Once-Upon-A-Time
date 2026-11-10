@@ -5,6 +5,7 @@ import type { ReaderHighlight, ReaderSearchResult, ReaderSettings, TocEntry } fr
 
 interface EpubReaderProps {
   url: string;
+  bookId?: string;
   initialCfi?: string | null;
   settings: ReaderSettings;
   highlights?: ReaderHighlight[];
@@ -61,6 +62,8 @@ interface EpubBook {
     cfiFromPercentage: (percent: number) => string;
     generate: (chars: number) => Promise<unknown>;
     percentageFromCfi: (cfi: string) => number;
+    save: () => string;
+    load: (locations: string) => unknown;
   };
   navigation: {
     get: (target: string) => NavigationEntry | undefined;
@@ -117,6 +120,7 @@ export interface EpubReaderRef {
 const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
   ({
     url,
+    bookId,
     initialCfi,
     settings,
     highlights = [],
@@ -134,12 +138,37 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
     const renderedHighlightsRef = useRef<Set<string>>(new Set());
     const temporarySearchCfiRef = useRef<string | null>(null);
     const temporarySearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const idleTimerRef = useRef<number | ReturnType<typeof setTimeout> | null>(null);
+    const lastLocationRef = useRef<RenditionLocation | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [isRenditionReady, setIsRenditionReady] = useState(false);
     const initializedRef = useRef(false);
 
-    const fetchEpubArchive = useCallback(async (sourceUrl: string) => {
+    const resolvedBookId = useMemo(() => {
+      if (bookId) return bookId;
+      const match = url.match(/\/api\/books\/([^/]+)/);
+      return match ? match[1] : url;
+    }, [bookId, url]);
+
+    const fetchEpubArchive = useCallback(async (sourceUrl: string, bookIdentifier: string) => {
+      const EPUB_CACHE_NAME = 'ouat-epub-cache-v1';
+      const cacheKey = typeof window !== 'undefined'
+        ? new URL(`/api/books/${encodeURIComponent(bookIdentifier)}/epub`, window.location.origin).toString()
+        : `/api/books/${encodeURIComponent(bookIdentifier)}/epub`;
+
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          const cache = await caches.open(EPUB_CACHE_NAME);
+          const cachedResponse = await cache.match(cacheKey);
+          if (cachedResponse) {
+            return await cachedResponse.arrayBuffer();
+          }
+        } catch (cacheErr) {
+          console.warn('Cache API lookup failed:', cacheErr);
+        }
+      }
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
 
@@ -154,7 +183,24 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
           throw new Error(`EPUB request failed with ${response.status}`);
         }
 
-        return await response.arrayBuffer();
+        const buffer = await response.arrayBuffer();
+
+        if (typeof window !== 'undefined' && 'caches' in window) {
+          try {
+            const cache = await caches.open(EPUB_CACHE_NAME);
+            const responseToCache = new Response(buffer.slice(0), {
+              headers: {
+                'Content-Type': 'application/epub+zip',
+                'Content-Length': buffer.byteLength.toString(),
+              },
+            });
+            await cache.put(cacheKey, responseToCache);
+          } catch (cacheWriteErr) {
+            console.warn('Failed to put EPUB into Cache API:', cacheWriteErr);
+          }
+        }
+
+        return buffer;
       } finally {
         clearTimeout(timeout);
       }
@@ -432,7 +478,7 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
 
         try {
           const ePub = await import('epubjs');
-          const archive = await fetchEpubArchive(url);
+          const archive = await fetchEpubArchive(url, resolvedBookId);
           const book = ePub.default(archive) as unknown as EpubBook;
           bookRef.current = book;
 
@@ -456,22 +502,36 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
           rendition.themes.select('dynamic');
           rendition.themes.fontSize(`${settings.fontSize}%`);
 
+          // Attempt to load cached locations from localStorage
+          const locationsStorageKey = `ouat_locations_${resolvedBookId}`;
+          let hasCachedLocations = false;
+          try {
+            const cachedLocations = localStorage.getItem(locationsStorageKey);
+            if (cachedLocations) {
+              book.locations.load(cachedLocations);
+              hasCachedLocations = true;
+            }
+          } catch (storageErr) {
+            console.warn('Failed to load cached locations from localStorage:', storageErr);
+          }
+
           rendition.on('relocated', (location: RenditionLocation) => {
             if (location?.start?.cfi) {
+              lastLocationRef.current = location;
               try {
-                  const locations = book.locations;
-                  let progress = 0;
-                  if (locations && typeof locations.percentageFromCfi === 'function') {
-                    const p = locations.percentageFromCfi(location.start.cfi);
-                    // epubjs returns -1 or 0 if locations aren't ready
-                    progress = p >= 0 ? p : 0;
-                  }
-                  
-                  onRelocated?.(location.start.cfi, progress);
-
-                  // Find current chapter with fallback
-                  let chapter: NavigationEntry | undefined = book.navigation.get(location.start.cfi);
+                const locations = book.locations;
+                let progress = 0;
+                if (locations && typeof locations.percentageFromCfi === 'function') {
+                  const p = locations.percentageFromCfi(location.start.cfi);
+                  // epubjs returns -1 or 0 or null if locations aren't ready
+                  progress = p != null && p >= 0 ? p : 0;
+                }
                 
+                onRelocated?.(location.start.cfi, progress);
+
+                // Find current chapter with fallback
+                let chapter: NavigationEntry | undefined = book.navigation.get(location.start.cfi);
+              
                 // Fallback: search spine/href if exact CFI match fails
                 if (!chapter && book.spine) {
                    const spineItem = book.spine.get(location.start.cfi);
@@ -512,13 +572,13 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
             }
           });
 
+          // Render first page immediately as soon as book is ready
           if (initialCfi) {
             await rendition.display(initialCfi);
           } else {
             await rendition.display();
           }
 
-          book.locations.generate(1600).catch(() => {});
           setIsRenditionReady(true);
 
           let resizeTimeout: ReturnType<typeof setTimeout>;
@@ -540,6 +600,39 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
 
           setIsLoading(false);
           onReady?.();
+
+          // Generate locations in background after first render if not already cached
+          if (!hasCachedLocations) {
+            const scheduleIdle =
+              typeof window !== 'undefined' && 'requestIdleCallback' in window
+                ? (cb: () => void) => window.requestIdleCallback(cb, { timeout: 2500 })
+                : (cb: () => void) => setTimeout(cb, 100);
+
+            idleTimerRef.current = scheduleIdle(async () => {
+              try {
+                if (!bookRef.current) return;
+                await book.locations.generate(1600);
+                const saved = book.locations.save();
+                if (saved) {
+                  try {
+                    localStorage.setItem(locationsStorageKey, saved);
+                  } catch (saveErr) {
+                    console.warn('Failed to save locations to localStorage:', saveErr);
+                  }
+                }
+
+                // If user is already on a page, update progress with newly generated locations
+                if (lastLocationRef.current?.start?.cfi) {
+                  const p = book.locations.percentageFromCfi(lastLocationRef.current.start.cfi);
+                  if (p != null && p >= 0) {
+                    onRelocated?.(lastLocationRef.current.start.cfi, p);
+                  }
+                }
+              } catch (genErr) {
+                console.warn('Failed to generate EPUB locations in background:', genErr);
+              }
+            });
+          }
         } catch (err) {
           console.error('Failed to initialize EPUB reader:', err);
           setLoadError(
@@ -556,6 +649,14 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
       return () => {
         clearTemporarySearchMark();
         cleanupRef.current?.();
+        if (idleTimerRef.current !== null) {
+          if (typeof window !== 'undefined' && 'cancelIdleCallback' in window && typeof idleTimerRef.current === 'number') {
+            window.cancelIdleCallback(idleTimerRef.current);
+          } else {
+            clearTimeout(idleTimerRef.current as ReturnType<typeof setTimeout>);
+          }
+          idleTimerRef.current = null;
+        }
         if (renditionRef.current) {
           try { renditionRef.current.destroy(); } catch { /* ignore */ }
         }

@@ -693,6 +693,7 @@ export default function ReaderControls({
       <div className="absolute inset-0 pt-4 pb-4">
         <EpubReaderComponent
           ref={readerRef}
+          bookId={bookId}
           url={epubUrl}
           initialCfi={initialCfi}
           settings={settings}

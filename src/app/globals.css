@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 /* =============================================
@@ -696,6 +695,7 @@ input:-webkit-autofill:focus {
   opacity: 0;
   transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: opacity;
+  animation: glowBreath 9s ease-in-out infinite;
 }
 .library-glow.is-active { opacity: 0.55; }
 
@@ -1023,6 +1023,12 @@ input:-webkit-autofill:focus {
   gap: 2.25rem 1.75rem;
 }
 
+/* Card entrance */
+@keyframes cardSettle {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Sleek Book Card */
 .sleek-book-card {
   position: relative;
@@ -1038,6 +1044,7 @@ input:-webkit-autofill:focus {
   text-align: left;
   font-family: inherit;
   color: inherit;
+  animation: cardSettle 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .sleek-book-card:focus-visible .sleek-book-3d {
   outline: 2px solid rgba(251, 191, 36, 0.6);
@@ -1720,15 +1727,6 @@ input:-webkit-autofill:focus {
 }
 .library-no-results em { color: #fbbf24; font-style: normal; }
 
-/* Card entrance */
-@keyframes cardSettle {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.sleek-book-card {
-  animation: cardSettle 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
 /* Library Navbar — floating, integrated, no full-width strip */
 .library-nav {
   position: relative;
@@ -1776,13 +1774,6 @@ input:-webkit-autofill:focus {
   text-transform: uppercase;
 }
 
-/* Cover glow refinements — breathing pulse + soft vignette */
-.library-glow {
-  animation: glowBreath 9s ease-in-out infinite;
-}
-.library-glow.is-active {
-  opacity: 0.55;
-}
 @keyframes glowBreath {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.04); }

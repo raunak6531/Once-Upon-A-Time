@@ -55,8 +55,11 @@ async function createSignedAssetUrl(
   return data.signedUrl;
 }
 
-export async function hydrateSignedBookAssets(book: Book) {
-  const supabase = await createClient();
+export async function hydrateSignedBookAssets(
+  book: Book,
+  supabaseClient?: Awaited<ReturnType<typeof createClient>>
+) {
+  const supabase = supabaseClient ?? (await createClient());
   const [epubUrl, coverUrl] = await Promise.all([
     createSignedAssetUrl(supabase, 'epubs', book.epub_file_url, 60 * 60),
     createSignedAssetUrl(supabase, 'covers', book.cover_url, 60 * 60),

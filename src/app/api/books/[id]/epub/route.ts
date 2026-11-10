@@ -8,7 +8,7 @@ interface BookEpubRouteProps {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: NextRequest, { params }: BookEpubRouteProps) {
+export async function GET(request: NextRequest, { params }: BookEpubRouteProps) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -21,13 +21,20 @@ export async function GET(_request: NextRequest, { params }: BookEpubRouteProps)
 
   const { data: book, error: bookError } = await supabase
     .from('books')
-    .select('title, epub_file_url')
+    .select('title, epub_file_url, updated_at')
     .eq('id', id)
     .eq('user_id', user.id)
     .single();
 
   if (bookError || !book?.epub_file_url) {
     return new Response('Book not found', { status: 404 });
+  }
+
+  // Build a stable ETag from book id + last updated timestamp
+  const etag = `"${id}-${book.updated_at ?? 'v1'}"`;
+  const ifNoneMatch = request.headers.get('if-none-match');
+  if (ifNoneMatch === etag) {
+    return new Response(null, { status: 304, headers: { ETag: etag } });
   }
 
   const epubPath = extractStoragePath(book.epub_file_url, 'epubs');
@@ -47,10 +54,11 @@ export async function GET(_request: NextRequest, { params }: BookEpubRouteProps)
 
   return new Response(file, {
     headers: {
-      'Cache-Control': 'private, no-store',
+      'Cache-Control': 'private, max-age=3600',
       'Content-Disposition': `inline; filename="${book.title || 'book'}.epub"`,
       'Content-Length': file.size.toString(),
       'Content-Type': 'application/epub+zip',
+      'ETag': etag,
     },
   });
 }
