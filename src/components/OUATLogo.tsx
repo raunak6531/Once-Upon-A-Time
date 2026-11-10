@@ -14,9 +14,9 @@ export function OUATLogo({ size = 48, className = '' }: { size?: number; classNa
     >
       <defs>
         <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#fbbf24" />
-          <stop offset="50%" stopColor="#fde68a" />
-          <stop offset="100%" stopColor="#fbbf24" />
+          <stop offset="0%" stopColor="#e8b45a" />
+          <stop offset="50%" stopColor="#f5d594" />
+          <stop offset="100%" stopColor="#e8b45a" />
           <animate
             attributeName="x1"
             values="0%;100%;0%"
@@ -50,13 +50,13 @@ export function OUATLogo({ size = 48, className = '' }: { size?: number; classNa
         opacity="0.6"
       />
       {/* Text lines on left page */}
-      <line x1="13" y1="22" x2="27" y2="23" stroke="rgba(251, 191, 36, 0.3)" strokeWidth="1" strokeLinecap="round" />
-      <line x1="13" y1="26" x2="25" y2="27" stroke="rgba(251, 191, 36, 0.2)" strokeWidth="1" strokeLinecap="round" />
-      <line x1="13" y1="30" x2="26" y2="31" stroke="rgba(251, 191, 36, 0.15)" strokeWidth="1" strokeLinecap="round" />
+      <line x1="13" y1="22" x2="27" y2="23" stroke="rgba(232, 180, 90, 0.3)" strokeWidth="1" strokeLinecap="round" />
+      <line x1="13" y1="26" x2="25" y2="27" stroke="rgba(232, 180, 90, 0.2)" strokeWidth="1" strokeLinecap="round" />
+      <line x1="13" y1="30" x2="26" y2="31" stroke="rgba(232, 180, 90, 0.15)" strokeWidth="1" strokeLinecap="round" />
       {/* Quill pen — rising from the book */}
       <path
         d="M42 8C42 8 38 18 37 24C36 28 37 32 38 34"
-        stroke="#fbbf24"
+        stroke="#e8b45a"
         strokeWidth="1.5"
         strokeLinecap="round"
         fill="none"
@@ -64,7 +64,7 @@ export function OUATLogo({ size = 48, className = '' }: { size?: number; classNa
       {/* Quill feather */}
       <path
         d="M42 8C44 6 48 4 50 6C52 8 48 12 44 12C42 12 42 10 42 8Z"
-        fill="#fbbf24"
+        fill="#e8b45a"
         opacity="0.9"
       />
       {/* Magic Sparkles */}
@@ -73,7 +73,7 @@ export function OUATLogo({ size = 48, className = '' }: { size?: number; classNa
           <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite" />
           <animate attributeName="r" values="1.5;2;1.5" dur="2s" repeatCount="indefinite" />
         </circle>
-        <circle cx="40" cy="6" r="1" fill="#fbbf24">
+        <circle cx="40" cy="6" r="1" fill="#e8b45a">
           <animate attributeName="opacity" values="0.7;0.1;0.7" dur="2.5s" repeatCount="indefinite" />
         </circle>
         <circle cx="50" cy="10" r="0.8" fill="white">

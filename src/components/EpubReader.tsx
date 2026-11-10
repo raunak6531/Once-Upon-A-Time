@@ -683,8 +683,8 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
             <div
               className="max-w-md rounded-xl border p-5 text-center"
               style={{
-                background: 'rgba(20, 20, 24, 0.9)',
-                borderColor: 'rgba(251, 191, 36, 0.18)',
+                background: 'var(--surface)',
+                borderColor: 'var(--line)',
                 color: 'var(--theme-text)',
               }}
             >
@@ -692,7 +692,7 @@ const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>(
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="mt-4 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black transition-colors hover:bg-amber-300"
+                className="mt-4 rounded-[10px] bg-[var(--accent)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--accent-ink)] transition-colors hover:opacity-90"
               >
                 Try Again
               </button>

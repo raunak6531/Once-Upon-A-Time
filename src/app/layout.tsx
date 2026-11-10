@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import { Inter, Playfair_Display } from "next/font/google";
+import { Geist, Newsreader } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
+const geist = Geist({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-sans",
+  variable: "--font-geist",
 });
 
-const playfairDisplay = Playfair_Display({
+const newsreader = Newsreader({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-serif",
+  variable: "--font-newsreader",
 });
 
 export const metadata: Metadata = {
@@ -27,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfairDisplay.variable}`}>
+    <html lang="en" className={`${geist.variable} ${newsreader.variable}`}>
       <body>
         {children}
       </body>

@@ -224,8 +224,8 @@ export default function UploadModal({ onClose, onUploadComplete }: UploadModalPr
               <div
                 className="mt-4 p-3 rounded-xl flex items-center gap-3 animate-fade-in"
                 style={{
-                  background: 'rgba(99, 102, 241, 0.08)',
-                  border: '1px solid rgba(99, 102, 241, 0.2)',
+                  background: 'rgba(232, 180, 90, 0.08)',
+                  border: '1px solid var(--line)',
                 }}
               >
                 <FileText className="w-5 h-5 shrink-0" style={{ color: 'var(--theme-accent)' }} />

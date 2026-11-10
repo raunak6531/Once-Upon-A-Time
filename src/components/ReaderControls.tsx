@@ -31,13 +31,13 @@ import { Book as BookIcon, Loader2 } from 'lucide-react';
 const EpubReaderComponent = dynamic(() => import('./EpubReader'), {
   ssr: false,
   loading: () => (
-    <div className="flex flex-col items-center justify-center h-full bg-[#0c0a1a]">
+    <div className="flex flex-col items-center justify-center h-full bg-[var(--bg,#0f0d0c)]">
       <div className="relative">
         <OUATLogo size={80} className="relative z-10" />
-        <div className="absolute inset-0 blur-2xl opacity-20 bg-amber-500 rounded-full animate-pulse" />
+        <div className="absolute inset-0 blur-2xl opacity-20 bg-[var(--accent,#e8b45a)] rounded-full animate-pulse" />
       </div>
       <div className="mt-8 text-center">
-        <p className="text-sm font-serif tracking-[0.2em] text-amber-500/80 uppercase animate-pulse">
+        <p className="text-sm font-serif tracking-[0.2em] text-[var(--accent,#e8b45a)]/80 uppercase animate-pulse">
           Opening Your Story...
         </p>
       </div>
@@ -451,8 +451,8 @@ export default function ReaderControls({
       '--theme-bg': isCustom ? settings.customBg : preset?.bg,
       '--theme-surface': isCustom ? settings.customBg : preset?.surface,
       '--theme-text': isCustom ? settings.customText : preset?.text,
-      '--theme-accent': '#fbbf24',
-      '--theme-accent-tint': 'rgba(251, 191, 36, 0.1)',
+      '--theme-accent': '#e8b45a',
+      '--theme-accent-tint': 'rgba(232, 180, 90, 0.1)',
     } as React.CSSProperties;
   }, [settings.theme, settings.customBg, settings.customText, themePresets]);
 
@@ -750,7 +750,7 @@ export default function ReaderControls({
             <button
               onClick={handleDictionary}
               disabled={isDictLoading}
-              className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs font-bold uppercase tracking-wider text-amber-400 hover:bg-amber-500/20 transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-[10px] bg-[var(--accent,#e8b45a)]/10 border border-[var(--accent,#e8b45a)]/20 px-3 py-2 text-xs font-bold uppercase tracking-wider text-[var(--accent,#e8b45a)] hover:bg-[var(--accent,#e8b45a)]/20 transition-all disabled:opacity-50"
             >
               {isDictLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookIcon className="w-3.5 h-3.5" />}
               Dictionary Lookup
@@ -782,7 +782,7 @@ export default function ReaderControls({
                   <div className="flex items-baseline gap-3">
                     <h4 className="text-lg font-serif font-bold text-[var(--theme-text)]">{dictionaryData.word}</h4>
                     {dictionaryData.phonetic && (
-                      <span className="text-xs text-amber-500/60 font-mono italic">{dictionaryData.phonetic}</span>
+                      <span className="text-xs text-[var(--accent,#e8b45a)]/60 font-mono italic">{dictionaryData.phonetic}</span>
                     )}
                   </div>
                   <div className="max-h-48 overflow-y-auto space-y-4 pr-2 custom-scrollbar">

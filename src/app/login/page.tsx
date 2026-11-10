@@ -24,7 +24,7 @@ function FloatingParticle({ delay, x, size }: { delay: number; x: number; size: 
         height: size,
         left: `${x}%`,
         bottom: '-20px',
-        background: 'radial-gradient(circle, rgba(251, 191, 36, 0.55) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(232, 180, 90, 0.45) 0%, transparent 70%)',
         animation: `particleRise 11s ease-in infinite`,
         animationDelay: `${delay}s`,
       }}
@@ -127,7 +127,7 @@ export default function LoginPage() {
     <div
       className="min-h-screen relative overflow-hidden flex items-center justify-center"
       style={{
-        background: 'linear-gradient(135deg, #0c0a1a 0%, #1a1035 30%, #12101f 60%, #0a0a14 100%)',
+        background: 'var(--bg)',
       }}
     >
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -136,7 +136,7 @@ export default function LoginPage() {
           style={{
             width: '600px',
             height: '700px',
-            background: 'radial-gradient(ellipse at center, rgba(251, 191, 36, 0.08) 0%, rgba(139, 92, 246, 0.04) 40%, transparent 70%)',
+            background: 'radial-gradient(ellipse at center, rgba(232, 180, 90, 0.05) 0%, transparent 70%)',
             filter: 'blur(60px)',
           }}
         />
@@ -157,7 +157,7 @@ export default function LoginPage() {
               height: 1 + (i % 2),
               left: `${(i * 13) % 100}%`,
               top: `${(i * 19) % 100}%`,
-              background: 'rgba(255,255,255,0.3)',
+              background: 'rgba(255,255,255,0.2)',
               animation: `twinkle ${3 + (i % 4)}s ease-in-out infinite`,
               animationDelay: `${(i % 5) * 0.7}s`,
             }}
@@ -174,14 +174,14 @@ export default function LoginPage() {
             className="w-1 rounded-full"
             style={{
               height: '40px',
-              background: 'linear-gradient(to bottom, rgba(251,191,36,0.2), rgba(251,191,36,0.6))',
+              background: 'linear-gradient(to bottom, rgba(232, 180, 90, 0.2), rgba(232, 180, 90, 0.6))',
             }}
           />
           <div
             className="w-3 h-3 rounded-full"
             style={{
-              background: 'radial-gradient(circle, #fbbf24 30%, #b45309 100%)',
-              boxShadow: '0 0 12px rgba(251,191,36,0.5)',
+              background: 'var(--accent)',
+              boxShadow: '0 0 12px rgba(232, 180, 90, 0.4)',
             }}
           />
         </div>
@@ -195,9 +195,9 @@ export default function LoginPage() {
         >
           <div
             style={{
-              background: 'linear-gradient(175deg, #1e1b30 0%, #171425 40%, #13111f 100%)',
-              borderRadius: '20px 20px 0 0',
-              border: '1px solid rgba(251, 191, 36, 0.15)',
+              background: 'var(--surface)',
+              borderRadius: '16px 16px 0 0',
+              border: '1px solid var(--line)',
               borderBottom: 'none',
               padding: '2.5rem 2rem 1.5rem',
               position: 'relative',
@@ -205,20 +205,20 @@ export default function LoginPage() {
             }}
           >
             <div
-              className="absolute top-0 left-0 right-0 h-1"
+              className="absolute top-0 left-0 right-0 h-0.5"
               style={{
-                background: 'linear-gradient(90deg, transparent, rgba(251,191,36,0.6), rgba(251,191,36,0.2), rgba(251,191,36,0.6), transparent)',
+                background: 'linear-gradient(90deg, transparent, rgba(232, 180, 90, 0.5), transparent)',
                 animation: 'shimmerGold 3s ease-in-out infinite',
               }}
             />
 
             <div
-              className="absolute top-3 left-3 w-6 h-6 opacity-20"
-              style={{ borderTop: '2px solid #fbbf24', borderLeft: '2px solid #fbbf24', borderRadius: '4px 0 0 0' }}
+              className="absolute top-3 left-3 w-6 h-6 opacity-25"
+              style={{ borderTop: '2px solid var(--accent)', borderLeft: '2px solid var(--accent)', borderRadius: '4px 0 0 0' }}
             />
             <div
-              className="absolute top-3 right-3 w-6 h-6 opacity-20"
-              style={{ borderTop: '2px solid #fbbf24', borderRight: '2px solid #fbbf24', borderRadius: '0 4px 0 0' }}
+              className="absolute top-3 right-3 w-6 h-6 opacity-25"
+              style={{ borderTop: '2px solid var(--accent)', borderRight: '2px solid var(--accent)', borderRadius: '0 4px 0 0' }}
             />
 
             <div className="text-center mb-6">
@@ -226,12 +226,12 @@ export default function LoginPage() {
                 <OUATLogo size={56} />
               </div>
               <h1
-                className="text-2xl font-bold text-white mb-1"
-                style={{ fontFamily: 'var(--font-serif)' }}
+                className="text-2xl font-bold mb-1"
+                style={{ fontFamily: 'var(--font-serif)', color: 'var(--text)' }}
               >
                 Once Upon A Time
               </h1>
-              <p className="text-xs" style={{ color: 'rgba(251, 191, 36, 0.7)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+              <p className="text-xs" style={{ color: 'var(--muted)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
                 Your story awaits
               </p>
             </div>
@@ -240,14 +240,22 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleModeChange('sign-in')}
-                className={`btn-3d flex-1 py-2.5 text-sm ${mode === 'sign-in' ? 'btn-3d-purple' : 'btn-3d-slate'}`}
+                className={`flex-1 py-2.5 text-sm rounded-[10px] transition-colors font-medium ${
+                  mode === 'sign-in'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
+                    : 'bg-transparent text-[var(--muted)] border border-[var(--line)] hover:text-[var(--text)]'
+                }`}
               >
                 Sign In
               </button>
               <button
                 type="button"
                 onClick={() => handleModeChange('sign-up')}
-                className={`btn-3d flex-1 py-2.5 text-sm ${mode === 'sign-up' ? 'btn-3d-purple' : 'btn-3d-slate'}`}
+                className={`flex-1 py-2.5 text-sm rounded-[10px] transition-colors font-medium ${
+                  mode === 'sign-up'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
+                    : 'bg-transparent text-[var(--muted)] border border-[var(--line)] hover:text-[var(--text)]'
+                }`}
               >
                 Sign Up
               </button>
@@ -257,7 +265,7 @@ export default function LoginPage() {
               <div className="relative group">
                 <Mail
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
-                  style={{ color: 'rgba(251, 191, 36, 0.5)' }}
+                  style={{ color: 'var(--muted)' }}
                 />
                 <input
                   id="email-input"
@@ -266,10 +274,11 @@ export default function LoginPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   required
-                  className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none transition-all duration-200"
+                  className="w-full pl-11 pr-4 py-3 rounded-[10px] text-sm outline-none transition-all duration-200"
                   style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(251, 191, 36, 0.12)',
+                    background: 'var(--bg)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--line)',
                   }}
                 />
               </div>
@@ -278,7 +287,7 @@ export default function LoginPage() {
                 <div className="relative group">
                   <Lock
                     className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
-                    style={{ color: 'rgba(251, 191, 36, 0.5)' }}
+                    style={{ color: 'var(--muted)' }}
                   />
                   <input
                     id="password-input"
@@ -288,10 +297,11 @@ export default function LoginPage() {
                     onChange={(event) => setPassword(event.target.value)}
                     required
                     minLength={8}
-                    className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none transition-all duration-200"
+                    className="w-full pl-11 pr-4 py-3 rounded-[10px] text-sm outline-none transition-all duration-200"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid rgba(251, 191, 36, 0.12)',
+                      background: 'var(--bg)',
+                      color: 'var(--text)',
+                      border: '1px solid var(--line)',
                     }}
                   />
                 </div>
@@ -301,7 +311,7 @@ export default function LoginPage() {
                 <div className="relative group">
                   <Lock
                     className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200"
-                    style={{ color: 'rgba(251, 191, 36, 0.5)' }}
+                    style={{ color: 'var(--muted)' }}
                   />
                   <input
                     id="confirm-password-input"
@@ -311,37 +321,38 @@ export default function LoginPage() {
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     required
                     minLength={8}
-                    className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none transition-all duration-200"
+                    className="w-full pl-11 pr-4 py-3 rounded-[10px] text-sm outline-none transition-all duration-200"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid rgba(251, 191, 36, 0.12)',
+                      background: 'var(--bg)',
+                      color: 'var(--text)',
+                      border: '1px solid var(--line)',
                     }}
                   />
                 </div>
               )}
 
               {isSignUp && (
-                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.52)' }}>
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
                   Use at least 8 characters with at least one letter and one number.
                 </p>
               )}
 
               {(error || callbackError) && (
                 <div
-                  className="text-sm p-3 rounded-xl animate-fade-in flex items-center gap-2"
+                  className="text-sm p-3 rounded-[10px] animate-fade-in flex items-center gap-2"
                   style={{
                     background: 'rgba(239, 68, 68, 0.12)',
                     color: '#fca5a5',
                     border: '1px solid rgba(239, 68, 68, 0.2)',
                   }}
                 >
-                  <span>!</span> {error || callbackError}
+                  <span className="font-bold">!</span> {error || callbackError}
                 </div>
               )}
 
               {message && (
                 <div
-                  className="text-sm p-3 rounded-xl animate-fade-in flex items-center gap-2"
+                  className="text-sm p-3 rounded-[10px] animate-fade-in flex items-center gap-2"
                   style={{
                     background: 'rgba(34, 197, 94, 0.12)',
                     color: '#86efac',
@@ -356,7 +367,7 @@ export default function LoginPage() {
                 id="auth-submit-btn"
                 type="submit"
                 disabled={loading}
-                className="btn-3d btn-3d-amber w-full py-3.5 text-sm mt-2"
+                className="w-full py-3.5 text-sm mt-2 rounded-[10px] font-semibold transition-opacity flex items-center justify-center gap-2 bg-[var(--accent)] text-[var(--accent-ink)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed border-0 shadow-none"
                 style={{ fontFamily: 'var(--font-serif)' }}
               >
                 {loading ? (
@@ -375,7 +386,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => handleModeChange('sign-in')}
-                  className="text-amber-300 hover:text-amber-200 transition-colors"
+                  className="text-[var(--accent)] hover:opacity-80 transition-opacity"
                 >
                   Back to sign in
                 </button>
@@ -383,7 +394,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => handleModeChange('forgot-password')}
-                  className="text-amber-300 hover:text-amber-200 transition-colors"
+                  className="text-[var(--accent)] hover:opacity-80 transition-opacity"
                 >
                   Forgot your password?
                 </button>
@@ -397,16 +408,10 @@ export default function LoginPage() {
               className="w-full h-full"
               preserveAspectRatio="none"
             >
-              <defs>
-                <linearGradient id="bookmarkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#13111f" />
-                  <stop offset="100%" stopColor="#0e0c18" />
-                </linearGradient>
-              </defs>
               <path
                 d="M0,0 L0,30 L190,10 L380,30 L380,0 Z"
-                fill="url(#bookmarkGrad)"
-                stroke="rgba(251, 191, 36, 0.15)"
+                fill="var(--surface)"
+                stroke="var(--line)"
                 strokeWidth="1"
               />
             </svg>
@@ -416,12 +421,12 @@ export default function LoginPage() {
         <div className="text-center mt-8 max-w-sm mx-auto" style={{ minHeight: '56px' }}>
           <p
             className="text-base italic transition-opacity duration-500"
-            style={{ color: 'rgba(255,255,255,0.55)', fontFamily: 'var(--font-serif)', lineHeight: '1.6' }}
+            style={{ color: 'var(--muted)', fontFamily: 'var(--font-serif)', lineHeight: '1.6' }}
             key={quoteIndex}
           >
             {LITERARY_QUOTES[quoteIndex].text}
             <br />
-            <span style={{ color: 'rgba(251, 191, 36, 0.5)', fontStyle: 'normal', fontSize: '0.75rem' }}>
+            <span style={{ color: 'var(--accent)', fontStyle: 'normal', fontSize: '0.75rem' }}>
               {LITERARY_QUOTES[quoteIndex].author}
             </span>
           </p>

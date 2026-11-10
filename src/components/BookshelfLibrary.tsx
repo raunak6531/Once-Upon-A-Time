@@ -47,8 +47,8 @@ const STATUS_LABELS: Record<ReadingStatus, string> = {
 };
 
 const SPINE_PALETTE = [
-  '#3b1f4f', '#1f2a4f', '#4f1f2a', '#1f4f3a', '#4f3a1f',
-  '#2a1f4f', '#4f2a1f', '#1f4f4a', '#3a1f4f', '#4f1f3a',
+  '#2e241c', '#3d2b1f', '#422818', '#2d3326', '#3b2f21',
+  '#402e1b', '#35251d', '#2b332b', '#44321e', '#332924',
 ];
 
 function spineFor(book: Book): string {
@@ -169,7 +169,7 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
         particleCount: 150,
         spread: 70,
         origin: { y: 0.6 },
-        colors: ['#fbbf24', '#f59e0b', '#ffffff']
+        colors: ['#e8b45a', '#dca346', '#efe8de']
       });
     }
 
@@ -633,7 +633,6 @@ function SleekBookCard({ book, index, onHover, onOpen, onDetails, onUpdate }: Ca
                 <span>{book.title}</span>
               </div>
             )}
-            <span className="sleek-book-gloss" aria-hidden />
           </div>
           {reading && <span className="sleek-book-bookmark" aria-hidden />}
         </div>

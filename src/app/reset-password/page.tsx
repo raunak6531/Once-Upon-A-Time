@@ -54,20 +54,20 @@ export default function ResetPasswordPage() {
   return (
     <main
       className="min-h-screen flex items-center justify-center px-6"
-      style={{ background: 'linear-gradient(135deg, #0c0a1a 0%, #1a1035 30%, #12101f 60%, #0a0a14 100%)' }}
+      style={{ background: 'var(--bg)' }}
     >
       <div
-        className="w-full max-w-md rounded-3xl p-8"
+        className="w-full max-w-md rounded-2xl p-8"
         style={{
-          background: 'linear-gradient(175deg, #1e1b30 0%, #171425 40%, #13111f 100%)',
-          border: '1px solid rgba(251, 191, 36, 0.15)',
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
           boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
         }}
       >
-        <h1 className="text-3xl text-white mb-2" style={{ fontFamily: 'var(--font-serif)' }}>
+        <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-serif)', color: 'var(--text)' }}>
           Reset password
         </h1>
-        <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.58)' }}>
+        <p className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
           Choose a fresh password for your library account.
         </p>
 
@@ -75,7 +75,7 @@ export default function ResetPasswordPage() {
           <label className="block">
             <span className="sr-only">New password</span>
             <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'rgba(251, 191, 36, 0.5)' }} />
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--muted)' }} />
               <input
                 type="password"
                 value={password}
@@ -83,10 +83,11 @@ export default function ResetPasswordPage() {
                 minLength={8}
                 required
                 placeholder="New password"
-                className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none"
+                className="w-full pl-11 pr-4 py-3 rounded-[10px] text-sm outline-none"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(251, 191, 36, 0.12)',
+                  background: 'var(--bg)',
+                  color: 'var(--text)',
+                  border: '1px solid var(--line)',
                 }}
               />
             </div>
@@ -95,7 +96,7 @@ export default function ResetPasswordPage() {
           <label className="block">
             <span className="sr-only">Confirm password</span>
             <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'rgba(251, 191, 36, 0.5)' }} />
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--muted)' }} />
               <input
                 type="password"
                 value={confirmPassword}
@@ -103,22 +104,23 @@ export default function ResetPasswordPage() {
                 minLength={8}
                 required
                 placeholder="Confirm password"
-                className="w-full pl-11 pr-4 py-3 rounded-xl text-white placeholder-gray-500 text-sm outline-none"
+                className="w-full pl-11 pr-4 py-3 rounded-[10px] text-sm outline-none"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(251, 191, 36, 0.12)',
+                  background: 'var(--bg)',
+                  color: 'var(--text)',
+                  border: '1px solid var(--line)',
                 }}
               />
             </div>
           </label>
 
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.52)' }}>
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>
             Use at least 8 characters with at least one letter and one number.
           </p>
 
           {error && (
             <div
-              className="text-sm p-3 rounded-xl"
+              className="text-sm p-3 rounded-[10px]"
               style={{
                 background: 'rgba(239, 68, 68, 0.12)',
                 color: '#fca5a5',
@@ -131,7 +133,7 @@ export default function ResetPasswordPage() {
 
           {message && (
             <div
-              className="text-sm p-3 rounded-xl"
+              className="text-sm p-3 rounded-[10px]"
               style={{
                 background: 'rgba(34, 197, 94, 0.12)',
                 color: '#86efac',
@@ -145,7 +147,7 @@ export default function ResetPasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="btn-3d btn-3d-amber w-full py-3.5 text-sm"
+            className="w-full py-3.5 text-sm rounded-[10px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed border-0 shadow-none flex items-center justify-center transition-opacity"
             style={{ fontFamily: 'var(--font-serif)' }}
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save new password'}
@@ -153,7 +155,7 @@ export default function ResetPasswordPage() {
         </form>
 
         <div className="mt-5 text-sm">
-          <Link href="/login" className="text-amber-300 hover:text-amber-200 transition-colors">
+          <Link href="/login" className="text-[var(--accent)] hover:opacity-80 transition-opacity">
             Back to sign in
           </Link>
         </div>

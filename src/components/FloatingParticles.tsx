@@ -24,7 +24,7 @@ function FloatingParticle({
         height: size,
         left: `${x}%`,
         bottom: '-20px',
-        background: `radial-gradient(circle, rgba(251, 191, 36, ${opacity}) 0%, transparent 70%)`,
+        background: `radial-gradient(circle, rgba(232, 180, 90, ${opacity * 0.7}) 0%, transparent 70%)`,
         animation: `particleRise ${duration}s ease-in infinite`,
         animationDelay: `${delay}s`,
       }}
