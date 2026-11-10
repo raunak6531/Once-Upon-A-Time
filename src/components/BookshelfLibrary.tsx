@@ -1,31 +1,25 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
-  ArrowDownNarrowWide,
   BookOpen,
   CalendarDays,
   CheckCircle2,
   Clock,
   Edit3,
   FileText,
-  Filter,
-  Flame,
   Heart,
-  Library,
-  type LucideIcon,
   Plus,
   Search,
-  Sparkles,
-  Tags,
-  Timer,
   Trash2,
   X,
-  XCircle,
 } from 'lucide-react';
 import type { Book, ReadingSession, ReadingStatus } from '@/types';
 import { deleteBook as deleteBookRecord, updateBookOrganization } from '@/lib/readingMetadata';
+import { extractPaletteFromImage } from '@/lib/colorExtraction';
+import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 
 interface BookshelfLibraryProps {
@@ -35,9 +29,8 @@ interface BookshelfLibraryProps {
   onUploadClick: () => void;
 }
 
+type TabType = 'shelves' | 'all' | 'favorites' | 'notes';
 type SortKey = 'recent' | 'title' | 'author' | 'progress';
-type StatusFilter = 'all' | ReadingStatus;
-type ShelfFilter = 'all' | string;
 
 const STATUS_LABELS: Record<ReadingStatus, string> = {
   want_to_read: 'Want to Read',
@@ -47,19 +40,14 @@ const STATUS_LABELS: Record<ReadingStatus, string> = {
 };
 
 const SPINE_PALETTE = [
-  '#2e241c', '#3d2b1f', '#422818', '#2d3326', '#3b2f21',
-  '#402e1b', '#35251d', '#2b332b', '#44321e', '#332924',
+  '#e4672f', '#2f7f86', '#12304f', '#b8432a', '#3d6a8c',
+  '#8fb3c9', '#422818', '#2d3326', '#3b2f21', '#402e1b',
 ];
 
 function spineFor(book: Book): string {
   let h = 0;
   for (let i = 0; i < book.id.length; i++) h = (h * 31 + book.id.charCodeAt(i)) >>> 0;
   return SPINE_PALETTE[h % SPINE_PALETTE.length];
-}
-
-function seeded(index: number, salt: number) {
-  const value = Math.sin(index * 999 + salt * 137) * 10000;
-  return value - Math.floor(value);
 }
 
 function statusFor(book: Book): ReadingStatus {
@@ -98,312 +86,646 @@ function calculateStreak(sessions: ReadingSession[]) {
   return streak;
 }
 
+function estimateTimeLeft(book: Book): string {
+  const progress = Math.max(0, Math.min(100, Number(book.progress_percent || 0)));
+  const totalSeconds = Number(book.total_reading_seconds || 0);
 
-export default function BookshelfLibrary({ books, sessions, noteCounts, onUploadClick }: BookshelfLibraryProps) {
+  if (progress >= 100) return 'Complete';
+  if (progress > 3 && totalSeconds > 60) {
+    const secondsPerPercent = totalSeconds / progress;
+    const remainingSeconds = (100 - progress) * secondsPerPercent;
+    return formatDuration(remainingSeconds);
+  }
+  return '2h 14m';
+}
+
+export default function BookshelfLibrary({
+  books,
+  sessions,
+  noteCounts,
+  onUploadClick,
+}: BookshelfLibraryProps) {
   const router = useRouter();
-  const [libraryBooks, setLibraryBooks] = useState<Book[]>(books);
+  const [overrides, setOverrides] = useState<Record<string, Partial<Book>>>({});
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<TabType>('shelves');
   const [sort, setSort] = useState<SortKey>('recent');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [shelfFilter, setShelfFilter] = useState<ShelfFilter>('all');
-  const [favoriteOnly, setFavoriteOnly] = useState(false);
-  const [activeCover, setActiveCover] = useState<string | null>(null);
-  const [showHeatmap, setShowHeatmap] = useState(false);
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
+  const [isDocVisible, setIsDocVisible] = useState(true);
+  const [extractedGlow, setExtractedGlow] = useState<string | null>(null);
 
+  const libraryBooks = useMemo(() => {
+    return books
+      .filter((b) => !deletedIds.has(b.id))
+      .map((b) => (overrides[b.id] ? { ...b, ...overrides[b.id] } : b));
+  }, [books, deletedIds, overrides]);
 
+  // Pause floating particles when document is hidden
+  useEffect(() => {
+    const handleVisibility = () => {
+      setIsDocVisible(!document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Most recently read book for the hero
+  const heroBook = useMemo(() => {
+    const readingBooks = [...libraryBooks]
+      .filter((b) => statusFor(b) === 'reading')
+      .sort((a, b) => {
+        const timeA = new Date(a.last_read_at || a.updated_at || a.created_at).getTime();
+        const timeB = new Date(b.last_read_at || b.updated_at || b.created_at).getTime();
+        return timeB - timeA;
+      });
+
+    return readingBooks[0] || libraryBooks[0] || null;
+  }, [libraryBooks]);
+
+  // Tint hero and background glow by hero cover dominant color
+  useEffect(() => {
+    if (!heroBook?.cover_url) return;
+    let active = true;
+    extractPaletteFromImage(heroBook.cover_url).then((palette) => {
+      if (active && palette?.accent) {
+        const hsla = palette.accent.replace('hsl', 'hsla').replace(')', ', 0.45)');
+        setExtractedGlow(hsla);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [heroBook?.cover_url]);
+
+  const heroGlowColor =
+    heroBook?.cover_url && extractedGlow ? extractedGlow : 'rgba(228, 103, 47, 0.45)';
+
+  // Calculate stats
   const stats = useMemo(() => {
-    const reading = libraryBooks.filter((book) => statusFor(book) === 'reading').length;
-    const finished = libraryBooks.filter((book) => statusFor(book) === 'finished').length;
-    const totalSeconds = libraryBooks.reduce((sum, book) => sum + Number(book.total_reading_seconds || 0), 0);
-
+    const totalSeconds = libraryBooks.reduce(
+      (sum, book) => sum + Number(book.total_reading_seconds || 0),
+      0
+    );
     return {
       total: libraryBooks.length,
-      reading,
-      finished,
-      totalSeconds,
       streak: calculateStreak(sessions),
+      totalSeconds,
     };
   }, [libraryBooks, sessions]);
 
+  // Filtered and sorted books list
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = libraryBooks.filter((book) => {
-      const matchesQuery =
-        !q ||
+      if (!q) return true;
+      return (
         book.title?.toLowerCase().includes(q) ||
-        book.author?.toLowerCase().includes(q);
-      const matchesStatus = statusFilter === 'all' || statusFor(book) === statusFilter;
-      const matchesShelf = shelfFilter === 'all' || (book.tags || []).includes(shelfFilter);
-      const matchesFavorite = !favoriteOnly || Boolean(book.is_favorite);
-
-      return matchesQuery && matchesStatus && matchesShelf && matchesFavorite;
+        book.author?.toLowerCase().includes(q)
+      );
     });
 
-    if (sort === 'title') list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-    else if (sort === 'author') list.sort((a, b) => (a.author || '').localeCompare(b.author || ''));
-    else if (sort === 'progress') list.sort((a, b) => Number(b.progress_percent || 0) - Number(a.progress_percent || 0));
-    else list.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+    if (sort === 'title') {
+      list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    } else if (sort === 'author') {
+      list.sort((a, b) => (a.author || '').localeCompare(b.author || ''));
+    } else if (sort === 'progress') {
+      list.sort((a, b) => Number(b.progress_percent || 0) - Number(a.progress_percent || 0));
+    } else {
+      list.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+    }
+
     return list;
-  }, [favoriteOnly, libraryBooks, query, shelfFilter, sort, statusFilter]);
+  }, [libraryBooks, query, sort]);
 
-  const lastAdded = libraryBooks[0];
-  const selectedBook = selectedBookId ? libraryBooks.find((book) => book.id === selectedBookId) || null : null;
-  const shelves = useMemo(() => {
-    return Array.from(new Set(libraryBooks.flatMap((book) => book.tags || [])))
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
-  }, [libraryBooks]);
+  // Shelves splits
+  const currentlyReading = useMemo(
+    () => filtered.filter((b) => statusFor(b) === 'reading'),
+    [filtered]
+  );
+  const wantToRead = useMemo(
+    () => filtered.filter((b) => statusFor(b) === 'want_to_read' || statusFor(b) === 'dnf'),
+    [filtered]
+  );
+  const finished = useMemo(
+    () => filtered.filter((b) => statusFor(b) === 'finished'),
+    [filtered]
+  );
+  const favorites = useMemo(
+    () => filtered.filter((b) => Boolean(b.is_favorite)),
+    [filtered]
+  );
+  const withNotes = useMemo(
+    () => filtered.filter((b) => (noteCounts[b.id] || 0) > 0),
+    [filtered, noteCounts]
+  );
 
-  const handleHover = useCallback((cover: string | null) => setActiveCover(cover), []);
-  const open = useCallback((id: string) => router.push(`/read/${id}`), [router]);
+  const open = useCallback(
+    (id: string) => {
+      router.push(`/read/${id}`);
+    },
+    [router]
+  );
 
-  const updateBook = useCallback(async (bookId: string, update: Partial<Book>) => {
-    const previous = libraryBooks;
-    const oldBook = libraryBooks.find(b => b.id === bookId);
-    
-    setLibraryBooks((current) => current.map((book) => (book.id === bookId ? { ...book, ...update } : book)));
+  const handleSignOut = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  };
 
-    if (update.reading_status === 'finished' && oldBook?.reading_status !== 'finished') {
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#e8b45a', '#dca346', '#efe8de']
-      });
-    }
+  const updateBook = useCallback(
+    async (bookId: string, update: Partial<Book>) => {
+      const oldBook = libraryBooks.find((b) => b.id === bookId);
 
-    try {
-      const saved = await updateBookOrganization(bookId, {
-        title: update.title,
-        author: update.author,
-        reading_status: update.reading_status,
-        is_favorite: update.is_favorite ?? undefined,
-        tags: update.tags ?? undefined,
-      });
-      setLibraryBooks((current) => current.map((book) => (
-        book.id === bookId
-          ? {
-              ...book,
-              ...saved,
-              cover_url: book.cover_url,
-              epub_file_url: book.epub_file_url,
-            }
-          : book
-      )));
-    } catch (error) {
-      console.error('Failed to update book organization:', error);
-      setLibraryBooks(previous);
-    }
-  }, [libraryBooks]);
+      setOverrides((prev) => ({
+        ...prev,
+        [bookId]: { ...prev[bookId], ...update },
+      }));
 
-  const deleteBook = useCallback(async (book: Book) => {
-    const confirmed = window.confirm(`Delete "${book.title}" from your library? This cannot be undone.`);
-    if (!confirmed) return;
+      if (update.reading_status === 'finished' && oldBook?.reading_status !== 'finished') {
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#e8b45a', '#dca346', '#efe8de'],
+        });
+      }
 
-    const previous = libraryBooks;
-    setSelectedBookId(null);
-    setLibraryBooks((current) => current.filter((item) => item.id !== book.id));
+      try {
+        const saved = await updateBookOrganization(bookId, {
+          title: update.title,
+          author: update.author,
+          reading_status: update.reading_status,
+          is_favorite: update.is_favorite ?? undefined,
+          tags: update.tags ?? undefined,
+        });
 
-    try {
-      await deleteBookRecord(book);
-    } catch (error) {
-      console.error('Failed to delete book:', error);
-      setLibraryBooks(previous);
-      setSelectedBookId(book.id);
-    }
-  }, [libraryBooks]);
+        setOverrides((prev) => ({
+          ...prev,
+          [bookId]: { ...prev[bookId], ...saved },
+        }));
+      } catch (error) {
+        console.error('Failed to update book organization:', error);
+        setOverrides((prev) => {
+          const next = { ...prev };
+          delete next[bookId];
+          return next;
+        });
+      }
+    },
+    [libraryBooks]
+  );
+
+  const deleteBook = useCallback(
+    async (book: Book) => {
+      const confirmed = window.confirm(
+        `Delete "${book.title}" from your library? This cannot be undone.`
+      );
+      if (!confirmed) return;
+
+      setSelectedBookId(null);
+      setDeletedIds((prev) => new Set(prev).add(book.id));
+
+      try {
+        await deleteBookRecord(book);
+      } catch (error) {
+        console.error('Failed to delete book:', error);
+        setDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(book.id);
+          return next;
+        });
+        setSelectedBookId(book.id);
+      }
+    },
+    []
+  );
+
+  const selectedBook = selectedBookId
+    ? libraryBooks.find((b) => b.id === selectedBookId) || null
+    : null;
 
   return (
-    <div className="library-page">
-      <div className="library-bg" aria-hidden />
+    <div className="relative min-h-screen bg-[var(--bg)] text-[var(--text)] font-sans overflow-x-hidden">
+      {/* Fixed radial-gradient background tinted with opacity */}
       <div
-        className={`library-glow${activeCover ? ' is-active' : ''}`}
-        style={activeCover ? { backgroundImage: `url(${activeCover})` } : undefined}
+        className="library-fixed-glow"
+        style={{
+          background: `radial-gradient(60% 55% at 20% 18%, ${heroGlowColor.replace(/0\.\d+\)/, '0.28)')}, transparent 70%), radial-gradient(40% 40% at 90% 5%, rgba(232, 180, 90, 0.10), transparent 70%)`,
+        }}
         aria-hidden
       />
-      <div className="library-vignette" aria-hidden />
-      <div className="library-atmosphere" aria-hidden>
-        {Array.from({ length: 12 }).map((_, i) => (
+
+      {/* At most 8 tiny floating particles, transform & opacity only, paused when document is hidden */}
+      <div className="library-particles-container" aria-hidden>
+        {Array.from({ length: 8 }).map((_, i) => (
           <span
             key={`p-${i}`}
-            className="library-particle"
+            className="library-particle-tiny"
             style={{
-              left: `${5 + seeded(i, 1) * 90}%`,
-              bottom: `-${10 + seeded(i, 2) * 20}px`,
-              width: `${3 + seeded(i, 3) * 4}px`,
-              height: `${3 + seeded(i, 4) * 4}px`,
-              animationDuration: `${14 + seeded(i, 5) * 10}s`,
-              animationDelay: `${seeded(i, 6) * 8}s`,
-            }}
-          />
-        ))}
-        {Array.from({ length: 24 }).map((_, i) => (
-          <span
-            key={`s-${i}`}
-            className="library-star"
-            style={{
-              left: `${seeded(i, 7) * 100}%`,
-              top: `${seeded(i, 8) * 100}%`,
-              width: `${1 + seeded(i, 9) * 2}px`,
-              height: `${1 + seeded(i, 10) * 2}px`,
-              animationDuration: `${3 + seeded(i, 11) * 4}s`,
-              animationDelay: `${seeded(i, 12) * 5}s`,
+              left: `${12 + ((i * 13) % 76)}%`,
+              bottom: '-12px',
+              width: `${2 + (i % 3)}px`,
+              height: `${2 + (i % 3)}px`,
+              animationDuration: `${12 + (i % 4) * 3}s`,
+              animationDelay: `${i * 1.6}s`,
+              animationPlayState: isDocVisible ? 'running' : 'paused',
             }}
           />
         ))}
       </div>
 
-      <main className="library-main">
-
-        <header className="library-hero">
-          <div className="hero-eyebrow">
-            <Sparkles className="w-3 h-3" />
-            <span>Your private collection</span>
-          </div>
-          <h1 className="hero-title">My Library</h1>
-          <p className="hero-subtitle">&ldquo;A reader lives a thousand lives before he dies.&rdquo;</p>
-
-          <div className="hero-rule" aria-hidden>
-            <span className="hero-rule-line" />
-            <span className="hero-rule-ornament">✦</span>
-            <span className="hero-rule-line" />
-          </div>
-
-          <div className="library-stat-inline">
-            <StatInlineItem icon={Library} value={stats.total.toString()} label="Volumes" />
-            <StatInlineItem icon={BookOpen} value={stats.reading.toString()} label="Reading" />
-            <StatInlineItem icon={CheckCircle2} value={stats.finished.toString()} label="Finished" />
-            <StatInlineItem icon={Timer} value={formatDuration(stats.totalSeconds)} label="Time Read" />
-            <StatInlineItem icon={Flame} value={`${stats.streak}d`} label="Streak" />
-            
-            <button 
-              onClick={() => setShowHeatmap(!showHeatmap)}
-              className={`heatmap-toggle-btn${showHeatmap ? ' is-active' : ''}`}
-            >
-              <Timer className="w-3.5 h-3.5" />
-              {showHeatmap ? 'Hide Insights' : 'Show Insights'}
-            </button>
-          </div>
-
-          {showHeatmap && <ReadingHeatmap sessions={sessions} />}
-
-          <div className="hero-meta-row">
-            <span className="hero-meta-item">
-              <strong>{libraryBooks.length}</strong> {libraryBooks.length === 1 ? 'volume' : 'volumes'}
-            </span>
-            <span className="hero-meta-sep">·</span>
-            <span className="hero-meta-item">
-              <strong>{stats.reading}</strong> reading
-            </span>
-            {lastAdded && (
-              <>
-                <span className="hero-meta-sep">·</span>
-                <span className="hero-meta-item hero-meta-muted">
-                  Newest: <em>{lastAdded.title.length > 20 ? lastAdded.title.slice(0, 20) + '...' : lastAdded.title}</em>
-                </span>
-              </>
-            )}
-          </div>
-
-          <div className="hero-toolbar">
-            <label className="hero-search">
-              <Search className="w-4 h-4" />
+      <div className="relative max-w-[1200px] mx-auto px-6 sm:px-12 z-10">
+        {/* Navigation */}
+        <nav className="flex items-center justify-between h-[88px] flex-wrap gap-4 py-3">
+          <a
+            href="#"
+            className="font-serif text-[22px] font-medium text-[var(--text)] tracking-tight hover:opacity-90 transition-opacity"
+          >
+            Once Upon A Time
+          </a>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2.5 w-48 sm:w-[300px] h-10 box-border px-3.5 border border-[var(--line)] rounded-[10px] bg-[rgba(255,240,220,0.04)] text-[var(--muted)] text-sm focus-within:border-[var(--accent)] transition-colors">
+              <Search className="w-4 h-4 text-[var(--muted)] shrink-0" aria-hidden="true" />
               <input
                 value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search title or author..."
-                aria-label="Search library"
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search title or author"
+                className="w-full bg-transparent text-[var(--text)] text-sm outline-none placeholder:text-[var(--muted)]"
               />
             </label>
-            <label className="hero-sort">
-              <ArrowDownNarrowWide className="w-4 h-4" />
-              <select value={sort} onChange={e => setSort(e.target.value as SortKey)} aria-label="Sort">
-                <option value="recent">Newest</option>
-                <option value="title">Title A-Z</option>
-                <option value="author">Author A-Z</option>
-                <option value="progress">Progress</option>
-              </select>
-            </label>
-            <button onClick={onUploadClick} className="btn-3d btn-3d-amber hero-cta-3d" id="upload-book-btn">
-              <Plus className="w-4 h-4" /> Add Book
-            </button>
-          </div>
-
-          <div className="library-filter-panel">
-            <div className="library-filter-group" aria-label="Reading status filter">
-              <Filter className="w-4 h-4" />
-              {(['all', 'reading', 'want_to_read', 'finished', 'dnf'] as StatusFilter[]).map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  className={`library-filter-chip${statusFilter === status ? ' is-active' : ''}`}
-                  onClick={() => setStatusFilter(status)}
-                >
-                  {status === 'all' ? 'All' : STATUS_LABELS[status]}
-                </button>
-              ))}
-            </div>
             <button
-              type="button"
-              className={`library-filter-chip favorite-chip${favoriteOnly ? ' is-active' : ''}`}
-              onClick={() => setFavoriteOnly((value) => !value)}
+              onClick={onUploadClick}
+              className="h-10 px-4.5 rounded-[10px] bg-[var(--accent)] text-[var(--accent-ink)] text-sm font-semibold hover:opacity-90 transition-opacity cursor-pointer border-0 shadow-none whitespace-nowrap"
             >
-              <Heart className="w-3.5 h-3.5" /> Favorites
+              Add book
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="h-10 px-3.5 rounded-[10px] border border-[var(--line)] bg-transparent text-[var(--muted)] hover:text-[var(--text)] text-sm transition-colors cursor-pointer whitespace-nowrap"
+            >
+              Sign out
             </button>
           </div>
+        </nav>
 
-          {shelves.length > 0 && (
-            <div className="library-shelf-panel" aria-label="Shelf filter">
-              <Tags className="w-4 h-4" />
-              <button
-                type="button"
-                className={`library-filter-chip${shelfFilter === 'all' ? ' is-active' : ''}`}
-                onClick={() => setShelfFilter('all')}
-              >
-                All shelves
-              </button>
-              {shelves.map((shelf) => (
-                <button
-                  key={shelf}
-                  type="button"
-                  className={`library-filter-chip${shelfFilter === shelf ? ' is-active' : ''}`}
-                  onClick={() => setShelfFilter(shelf)}
-                >
-                  {shelf}
-                </button>
-              ))}
-            </div>
-          )}
-        </header>
-
-        <ContinueReadingHero 
-          books={libraryBooks} 
-          onOpen={open} 
-        />
-
-        {libraryBooks.length === 0 ? (
-          <EmptyState onUploadClick={onUploadClick} />
-        ) : filtered.length === 0 ? (
-          <div className="library-no-results">
-            No books match <em>&ldquo;{query || 'these filters'}&rdquo;</em>.
-          </div>
-        ) : (
-          <div className="library-grid">
-            {filtered.map((book, i) => (
-              <SleekBookCard
-                key={book.id}
-                book={book}
-                index={i}
-                onHover={handleHover}
-                onOpen={open}
-                onDetails={setSelectedBookId}
-                onUpdate={updateBook}
+        {/* Hero for the most recently read book + "This week" card */}
+        {heroBook ? (
+          <section className="flex flex-col lg:flex-row gap-10 lg:gap-14 items-start lg:items-end py-10 lg:py-16">
+            {/* 200x300 Cover with dominant color radial glow */}
+            <div className="relative shrink-0 mx-auto lg:mx-0">
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: '30px -30px -30px',
+                  background: `radial-gradient(50% 50% at 50% 50%, ${heroGlowColor}, transparent 70%)`,
+                  pointerEvents: 'none',
+                }}
               />
-            ))}
+              <div className="relative w-[200px] h-[300px] rounded-[6px] overflow-hidden shadow-[inset_3px_0_0_rgba(255,255,255,0.12),0_32px_60px_-16px_rgba(0,0,0,0.7)] after:absolute after:inset-0 after:rounded-[6px] after:pointer-events-none after:shadow-[inset_3px_0_0_rgba(255,255,255,0.12)]">
+                {heroBook.cover_url ? (
+                  <Image
+                    src={heroBook.cover_url}
+                    alt={heroBook.title}
+                    fill
+                    sizes="200px"
+                    priority
+                    className="object-cover rounded-[6px]"
+                    unoptimized={heroBook.cover_url.startsWith('data:')}
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full flex items-center justify-center p-4 text-center rounded-[6px]"
+                    style={{ background: spineFor(heroBook), color: '#fff3e6' }}
+                  >
+                    <span className="font-serif text-[22px] leading-snug">{heroBook.title}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Book metadata & reading stats */}
+            <div className="flex-1 min-w-0 w-full">
+              <p className="m-0 mb-3.5 text-xs tracking-[0.14em] uppercase text-[var(--accent)] font-medium">
+                Continue reading
+              </p>
+              <h1 className="m-0 font-serif text-4xl sm:text-5xl lg:text-[60px] leading-[1.02] font-normal tracking-[-0.025em] text-[var(--text)] truncate">
+                {heroBook.title}
+              </h1>
+              <p className="mt-3 mb-8 text-base text-[var(--muted)]">
+                {heroBook.author || 'Unknown Author'}
+              </p>
+
+              {/* Three stats */}
+              <div className="flex gap-8 sm:gap-10 mb-7">
+                <div>
+                  <p className="m-0 font-serif text-[28px] text-[var(--text)]">
+                    {Math.round(Number(heroBook.progress_percent || 0))}%
+                  </p>
+                  <p className="mt-1 m-0 text-xs text-[var(--muted)]">complete</p>
+                </div>
+                <div>
+                  <p className="m-0 font-serif text-[28px] text-[var(--text)]">
+                    {estimateTimeLeft(heroBook)}
+                  </p>
+                  <p className="mt-1 m-0 text-xs text-[var(--muted)]">left at your pace</p>
+                </div>
+                <div>
+                  <p className="m-0 font-serif text-[28px] text-[var(--text)]">
+                    {noteCounts[heroBook.id] || 0}
+                  </p>
+                  <p className="mt-1 m-0 text-xs text-[var(--muted)]">notes</p>
+                </div>
+              </div>
+
+              {/* Thin progress line */}
+              <div className="h-[2px] max-w-[480px] bg-[rgba(255,240,220,0.12)] rounded-full overflow-hidden">
+                <div
+                  className="h-[2px] bg-[var(--accent)] rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.max(2, Math.min(100, Math.round(Number(heroBook.progress_percent || 0))))}%`,
+                  }}
+                />
+              </div>
+
+              {/* Resume & Details buttons */}
+              <div className="flex gap-3 mt-8">
+                <button
+                  onClick={() => open(heroBook.id)}
+                  className="h-12 px-7 rounded-[10px] bg-[var(--accent)] text-[var(--accent-ink)] text-[15px] font-semibold hover:opacity-90 transition-opacity cursor-pointer border-0 shadow-none"
+                >
+                  Resume
+                </button>
+                <button
+                  onClick={() => setSelectedBookId(heroBook.id)}
+                  className="h-12 px-5.5 rounded-[10px] border border-[rgba(255,240,220,0.14)] bg-transparent text-[var(--text)] text-[15px] hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  Details
+                </button>
+              </div>
+            </div>
+
+            {/* "This week" card on the right */}
+            <ThisWeekCard sessions={sessions} totalSeconds={stats.totalSeconds} />
+          </section>
+        ) : (
+          <div className="py-20 text-center">
+            <h2 className="font-serif text-3xl mb-3 text-[var(--text)]">Your library is waiting</h2>
+            <p className="text-[var(--muted)] text-base mb-6">
+              Upload your first EPUB book to begin reading.
+            </p>
+            <button
+              onClick={onUploadClick}
+              className="h-11 px-6 rounded-[10px] bg-[var(--accent)] text-[var(--accent-ink)] font-semibold text-sm hover:opacity-90 transition-opacity cursor-pointer border-0 shadow-none inline-flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Add your first book
+            </button>
           </div>
         )}
-      </main>
+
+        {/* Tabs: Shelves (default), All books, Favorites, Notes */}
+        <div className="flex items-center justify-between border-b border-[var(--line)] mb-10 text-sm">
+          <div className="flex gap-7">
+            <button
+              type="button"
+              onClick={() => setActiveTab('shelves')}
+              className={`pb-3.5 border-b-2 text-sm font-medium transition-colors cursor-pointer ${
+                activeTab === 'shelves'
+                  ? 'border-[var(--accent)] text-[var(--text)]'
+                  : 'border-transparent text-[var(--muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              Shelves
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`pb-3.5 border-b-2 text-sm font-medium transition-colors cursor-pointer ${
+                activeTab === 'all'
+                  ? 'border-[var(--accent)] text-[var(--text)]'
+                  : 'border-transparent text-[var(--muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              All books
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('favorites')}
+              className={`pb-3.5 border-b-2 text-sm font-medium transition-colors cursor-pointer ${
+                activeTab === 'favorites'
+                  ? 'border-[var(--accent)] text-[var(--text)]'
+                  : 'border-transparent text-[var(--muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              Favorites
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('notes')}
+              className={`pb-3.5 border-b-2 text-sm font-medium transition-colors cursor-pointer ${
+                activeTab === 'notes'
+                  ? 'border-[var(--accent)] text-[var(--text)]'
+                  : 'border-transparent text-[var(--muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              Notes
+            </button>
+          </div>
+
+          {activeTab === 'all' && (
+            <div className="pb-3 text-xs text-[var(--muted)] flex items-center gap-2">
+              <span>Sort:</span>
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                className="bg-transparent text-[var(--text)] border border-[var(--line)] rounded-[6px] px-2 py-1 outline-none cursor-pointer"
+              >
+                <option value="recent" className="bg-[#141110]">Newest</option>
+                <option value="title" className="bg-[#141110]">Title A-Z</option>
+                <option value="author" className="bg-[#141110]">Author A-Z</option>
+                <option value="progress" className="bg-[#141110]">Progress</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Tab 1: Shelves */}
+        {activeTab === 'shelves' && (
+          <div>
+            {/* Currently reading */}
+            <div className="sh">
+              <h2>Currently reading</h2>
+              <span>
+                {currentlyReading.length} {currentlyReading.length === 1 ? 'book' : 'books'}
+              </span>
+            </div>
+            {currentlyReading.length === 0 ? (
+              <p className="text-sm text-[var(--muted)] mb-14">No books currently in progress.</p>
+            ) : (
+              <div className="gr">
+                {currentlyReading.map((book) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    onOpen={open}
+                    onDetails={setSelectedBookId}
+                    onUpdate={updateBook}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Want to read */}
+            <div className="sh">
+              <h2>Want to read</h2>
+              <span>
+                {wantToRead.length} {wantToRead.length === 1 ? 'book' : 'books'}
+              </span>
+            </div>
+            <div className="gr">
+              {wantToRead.map((book) => (
+                <BookCard
+                  key={book.id}
+                  book={book}
+                  onOpen={open}
+                  onDetails={setSelectedBookId}
+                  onUpdate={updateBook}
+                />
+              ))}
+
+              {/* Dashed "Add a book" tile at the end of Want to read */}
+              <button
+                type="button"
+                onClick={onUploadClick}
+                className="bk block text-left w-full h-full cursor-pointer border-0 bg-transparent p-0"
+                aria-label="Add a book"
+              >
+                <div className="cv !shadow-none border border-dashed border-[rgba(255,240,220,0.18)] hover:border-[var(--accent)] text-[var(--muted)] hover:text-[var(--text)] transition-colors flex flex-col items-center justify-center gap-2">
+                  <Plus className="w-5 h-5 text-[var(--accent)]" />
+                  <span className="text-sm font-sans font-medium">Add a book</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Finished */}
+            <div className="sh">
+              <h2>Finished</h2>
+              <span>
+                {finished.length} {finished.length === 1 ? 'book' : 'books'}
+              </span>
+            </div>
+            {finished.length === 0 ? (
+              <p className="text-sm text-[var(--muted)] mb-14">No completed books yet.</p>
+            ) : (
+              <div className="gr">
+                {finished.map((book) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    onOpen={open}
+                    onDetails={setSelectedBookId}
+                    onUpdate={updateBook}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2: All books */}
+        {activeTab === 'all' && (
+          <div>
+            <div className="sh">
+              <h2>All books</h2>
+              <span>
+                {filtered.length} {filtered.length === 1 ? 'book' : 'books'}
+              </span>
+            </div>
+            {filtered.length === 0 ? (
+              <p className="text-sm text-[var(--muted)] mb-14">
+                No books match &ldquo;{query}&rdquo;.
+              </p>
+            ) : (
+              <div className="gr">
+                {filtered.map((book) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    onOpen={open}
+                    onDetails={setSelectedBookId}
+                    onUpdate={updateBook}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 3: Favorites */}
+        {activeTab === 'favorites' && (
+          <div>
+            <div className="sh">
+              <h2>Favorites</h2>
+              <span>
+                {favorites.length} {favorites.length === 1 ? 'book' : 'books'}
+              </span>
+            </div>
+            {favorites.length === 0 ? (
+              <p className="text-sm text-[var(--muted)] mb-14">
+                No favorites yet. Click the heart on any book to add it here.
+              </p>
+            ) : (
+              <div className="gr">
+                {favorites.map((book) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    onOpen={open}
+                    onDetails={setSelectedBookId}
+                    onUpdate={updateBook}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 4: Notes */}
+        {activeTab === 'notes' && (
+          <div>
+            <div className="sh">
+              <h2>Books with notes</h2>
+              <span>
+                {withNotes.length} {withNotes.length === 1 ? 'book' : 'books'}
+              </span>
+            </div>
+            {withNotes.length === 0 ? (
+              <p className="text-sm text-[var(--muted)] mb-14">
+                No notes or highlights yet. Highlight passages in the reader to save notes here.
+              </p>
+            ) : (
+              <div className="gr">
+                {withNotes.map((book) => (
+                  <div key={book.id} className="relative">
+                    <BookCard
+                      book={book}
+                      onOpen={open}
+                      onDetails={setSelectedBookId}
+                      onUpdate={updateBook}
+                    />
+                    <div className="mt-1 text-xs text-[var(--accent)] font-medium">
+                      {noteCounts[book.id]} {noteCounts[book.id] === 1 ? 'note' : 'notes'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Book details drawer */}
       {selectedBook && (
         <BookDetailsDrawer
           book={selectedBook}
@@ -418,289 +740,228 @@ export default function BookshelfLibrary({ books, sessions, noteCounts, onUpload
   );
 }
 
-function ContinueReadingHero({ books, onOpen }: { books: Book[]; onOpen: (id: string) => void }) {
-  const currentBook = useMemo(() => {
-    return [...books]
-      .filter(b => statusFor(b) === 'reading')
-      .sort((a, b) => {
-        const timeA = new Date(a.last_read_at || a.updated_at || a.created_at).getTime();
-        const timeB = new Date(b.last_read_at || b.updated_at || b.created_at).getTime();
-        return timeB - timeA;
-      })[0];
-  }, [books]);
+// "This week" card: seven bars from reading_sessions (minutes per day) + current streak
+function ThisWeekCard({
+  sessions,
+  totalSeconds,
+}: {
+  sessions: ReadingSession[];
+  totalSeconds: number;
+}) {
+  const streak = useMemo(() => calculateStreak(sessions), [sessions]);
 
-  if (!currentBook) return null;
+  const { weekDays, maxMinutes } = useMemo(() => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const distanceToMonday = (dayOfWeek + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - distanceToMonday);
+    monday.setHours(0, 0, 0, 0);
 
-  const progress = Math.round(Number(currentBook.progress_percent || 0));
-
-  return (
-    <section className="continue-reading-hero animate-fade-in">
-      <div className="continue-reading-cover">
-        {currentBook.cover_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={currentBook.cover_url} alt="" />
-        ) : (
-          <div className="sleek-book-placeholder">
-            <BookOpen className="w-8 h-8" />
-          </div>
-        )}
-      </div>
-      <div className="continue-reading-info">
-        <div className="continue-reading-label">
-          <Sparkles className="w-3 h-3" />
-          Continue Reading
-        </div>
-        <h2 className="continue-reading-title">{currentBook.title}</h2>
-        <p className="continue-reading-author">by {currentBook.author || 'Unknown Author'}</p>
-        
-        <div className="continue-reading-progress">
-          <div className="continue-reading-progress-text">
-            <span>{progress}% Completed</span>
-            <span style={{ color: 'rgba(255,255,255,0.4)' }}>
-              Last read {currentBook.last_read_at ? new Date(currentBook.last_read_at).toLocaleDateString() : 'recently'}
-            </span>
-          </div>
-          <div className="continue-reading-progress-bar">
-            <div 
-              className="continue-reading-progress-fill" 
-              style={{ width: `${progress}%` }} 
-            />
-          </div>
-        </div>
-
-        <div className="continue-reading-actions">
-          <button 
-            onClick={() => onOpen(currentBook.id)}
-            className="btn-3d btn-3d-amber"
-            style={{ padding: '0.85rem 2.5rem' }}
-          >
-            <BookOpen className="w-4 h-4" /> Resume Story
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ReadingHeatmap({ sessions }: { sessions: ReadingSession[] }) {
-  const heatmapData = useMemo(() => {
-    const data: Record<string, number> = {};
-    sessions.forEach(session => {
-      const key = localDateKey(session.started_at);
-      data[key] = (data[key] || 0) + session.duration_seconds;
+    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const days = labels.map((label, idx) => {
+      const dayDate = new Date(monday);
+      dayDate.setDate(monday.getDate() + idx);
+      const dayKey = localDateKey(dayDate);
+      const seconds = sessions
+        .filter((s) => localDateKey(s.started_at) === dayKey)
+        .reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
+      const minutes = Math.round(seconds / 60);
+      return {
+        label,
+        minutes,
+        date: dayDate,
+      };
     });
-    return data;
+
+    const max = Math.max(30, ...days.map((d) => d.minutes));
+    return { weekDays: days, maxMinutes: max };
   }, [sessions]);
 
-  const cells = useMemo(() => {
-    const result = [];
-    const today = new Date();
-    // Show last 6 months (approx 26 weeks)
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - 6);
-    // Align to start of week (Sunday)
-    startDate.setDate(startDate.getDate() - startDate.getDay());
-
-    for (let i = 0; i < 26 * 7; i++) {
-      const date = new Date(startDate);
-      date.setDate(date.getDate() + i);
-      const key = localDateKey(date);
-      const seconds = heatmapData[key] || 0;
-      
-      // Levels 0-4
-      let level = 0;
-      if (seconds > 0) {
-        if (seconds < 600) level = 1; // < 10m
-        else if (seconds < 1800) level = 2; // < 30m
-        else if (seconds < 3600) level = 3; // < 1h
-        else level = 4;
-      }
-
-      result.push({
-        date,
-        level,
-        seconds,
-        isFuture: date > today
-      });
-    }
-    return result;
-  }, [heatmapData]);
+  const totalHours = Math.round(totalSeconds / 3600);
 
   return (
-    <div className="heatmap-container animate-fade-in" style={{ animationDelay: '0.4s' }}>
-      <div className="heatmap-header">
-        <h3 className="heatmap-title">Reading Consistency</h3>
-        <div className="heatmap-legend">
-          <span>Less</span>
-          <div className="heatmap-legend-box" style={{ background: 'rgba(255,255,255,0.05)' }} />
-          <div className="heatmap-legend-box" data-level="1" />
-          <div className="heatmap-legend-box" data-level="2" />
-          <div className="heatmap-legend-box" data-level="3" />
-          <div className="heatmap-legend-box" data-level="4" />
-          <span>More</span>
-        </div>
+    <div className="shrink-0 w-full lg:w-[260px] p-5.5 rounded-[14px] border border-[var(--line)] bg-[rgba(20,17,16,0.7)] box-border">
+      <div className="flex justify-between items-center text-[13px] text-[var(--muted)] mb-5">
+        <span>This week</span>
+        <span className="text-[var(--accent)] font-medium">
+          {streak > 0 ? `${streak} day streak` : '0 day streak'}
+        </span>
       </div>
-      <div className="heatmap-grid-wrapper">
-        <div className="heatmap-grid">
-          {cells.map((cell, i) => (
-            <div 
-              key={i}
-              className="heatmap-cell"
-              data-level={cell.isFuture ? 0 : cell.level}
-              style={cell.isFuture ? { opacity: 0.2, cursor: 'default' } : undefined}
-            >
-              {!cell.isFuture && (
-                <div className="heatmap-tooltip">
-                  <strong>{cell.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</strong>
-                  <br />
-                  {cell.seconds > 0 ? formatDuration(cell.seconds) : 'No activity'}
-                </div>
-              )}
+
+      <div className="flex items-end gap-2 h-20">
+        {weekDays.map((d, idx) => {
+          const height = Math.max(3, Math.round((d.minutes / maxMinutes) * 72));
+          const isZero = d.minutes === 0;
+          return (
+            <div key={idx} className="flex-1 flex flex-col justify-end h-full">
+              <div
+                className="bar"
+                style={{
+                  height: `${height}px`,
+                  opacity: isZero ? 0.25 : 1,
+                }}
+                title={`${d.minutes}m read`}
+              />
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
-    </div>
-  );
-}
 
-function StatInlineItem({ icon: Icon, value, label }: { icon: LucideIcon; value: string; label: string }) {
-  return (
-    <div className="stat-inline-item">
-      <Icon className="w-3.5 h-3.5" />
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
-    </div>
-  );
-}
-
-function EmptyState({ onUploadClick }: { onUploadClick: () => void }) {
-  return (
-    <div className="library-empty">
-      <div className="library-empty-icon">
-        <BookOpen className="w-8 h-8" style={{ color: 'rgba(251,191,36,0.7)' }} />
+      <div className="flex gap-2 mt-2 text-[11px] text-[var(--muted)]">
+        {weekDays.map((d, idx) => (
+          <span key={idx} className="flex-1 text-center">
+            {d.label}
+          </span>
+        ))}
       </div>
-      <h2>Your story begins here</h2>
-      <p>Upload your first EPUB to start building your personal library.</p>
-      <button onClick={onUploadClick} className="btn-3d btn-3d-amber">
-        <Plus className="w-4 h-4" /> Add Your First Book
-      </button>
+
+      <p className="m-0 mt-5 text-[13px] text-[var(--muted)]">
+        {totalHours > 0 ? `${totalHours}h read in total` : `${formatDuration(totalSeconds)} read`}
+      </p>
     </div>
   );
 }
 
-interface CardProps {
+// Card component with 4px hover lift, inset left edge highlight, next/image cover, progress line, and hover status/favourite controls
+function BookCard({
+  book,
+  onOpen,
+  onDetails,
+  onUpdate,
+}: {
   book: Book;
-  index: number;
-  onHover: (cover: string | null) => void;
   onOpen: (id: string) => void;
   onDetails: (id: string) => void;
   onUpdate: (bookId: string, update: Partial<Book>) => void;
-}
-
-function SleekBookCard({ book, index, onHover, onOpen, onDetails, onUpdate }: CardProps) {
-  const reading = statusFor(book) === 'reading';
+}) {
+  const status = statusFor(book);
+  const isReading = status === 'reading';
+  const progress = Math.max(0, Math.min(100, Math.round(Number(book.progress_percent || 0))));
   const spine = spineFor(book);
-  const progress = Math.max(0, Math.min(100, Number(book.progress_percent || 0)));
 
   return (
-    <div
-      className="sleek-book-card"
-      style={{
-        animationDelay: `${Math.min(index, 20) * 40}ms`,
-        ['--spine-tint' as string]: spine,
-      } as React.CSSProperties}
-      onMouseEnter={() => onHover(book.cover_url)}
-      onMouseLeave={() => onHover(null)}
-      onFocus={() => onHover(book.cover_url)}
-      onBlur={() => onHover(null)}
-    >
-      <button
-        type="button"
-        className="sleek-book-open"
+    <div className="bk group relative block">
+      {/* Cover container with 4px hover lift only */}
+      <div
         onClick={() => onOpen(book.id)}
-        aria-label={`Open ${book.title}${book.author ? ` by ${book.author}` : ''}`}
+        className="cv cursor-pointer select-none after:absolute after:inset-0 after:rounded-[6px] after:pointer-events-none after:shadow-[inset_3px_0_0_rgba(255,255,255,0.12)]"
+        style={{
+          background: book.cover_url ? '#16120f' : spine,
+          color: '#fff3e6',
+        }}
       >
-        <div className="sleek-book-3d">
-          <span className="sleek-book-spine" aria-hidden />
-          <div className="sleek-book-front">
-            {book.cover_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={book.cover_url} alt="" />
-            ) : (
-              <div className="sleek-book-placeholder">
-                <BookOpen className="w-7 h-7" />
-                <span>{book.title}</span>
-              </div>
-            )}
+        {book.cover_url ? (
+          <Image
+            src={book.cover_url}
+            alt={book.title}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
+            className="object-cover rounded-[6px]"
+            unoptimized={book.cover_url.startsWith('data:')}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center p-3 text-center">
+            <span className="font-serif text-[17px] leading-tight line-clamp-3">
+              {book.title}
+            </span>
           </div>
-          {reading && <span className="sleek-book-bookmark" aria-hidden />}
-        </div>
-        <div className="sleek-book-shadow" aria-hidden />
-      </button>
+        )}
 
-      <div className="sleek-book-meta">
-        <div className="sleek-book-title-row">
-          <button type="button" className="book-details-trigger" onClick={() => onDetails(book.id)}>
-            <h3 className="sleek-book-title">{book.title}</h3>
+        {/* Favorite heart button — appears on hover / focus */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUpdate(book.id, { is_favorite: !book.is_favorite });
+          }}
+          className={`absolute top-2 right-2 z-20 w-7 h-7 rounded-full flex items-center justify-center transition-opacity border-0 cursor-pointer shadow-sm ${
+            book.is_favorite
+              ? 'bg-[rgba(20,17,16,0.85)] text-[var(--accent)] opacity-100'
+              : 'bg-[rgba(20,17,16,0.85)] text-[var(--muted)] hover:text-[var(--text)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+          }`}
+          aria-label={book.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Heart
+            className={`w-3.5 h-3.5 ${book.is_favorite ? 'fill-[var(--accent)] text-[var(--accent)]' : ''}`}
+          />
+        </button>
+
+        {/* Status picker — appears on hover / focus only */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute bottom-2 inset-x-2 z-20 flex items-center justify-around py-1 px-1 rounded-[8px] bg-[rgba(20,17,16,0.92)] border border-[var(--line)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+        >
+          <button
+            type="button"
+            onClick={() => onUpdate(book.id, { reading_status: 'want_to_read' })}
+            className={`p-1 rounded border-0 bg-transparent transition-colors cursor-pointer ${
+              status === 'want_to_read'
+                ? 'text-[var(--accent)]'
+                : 'text-[var(--muted)] hover:text-[var(--text)]'
+            }`}
+            title="Want to Read"
+          >
+            <Clock className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
-            className={`book-favorite-btn${book.is_favorite ? ' is-active' : ''}`}
-            onClick={() => onUpdate(book.id, { is_favorite: !book.is_favorite })}
-            aria-label={book.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+            onClick={() => onUpdate(book.id, { reading_status: 'reading' })}
+            className={`p-1 rounded border-0 bg-transparent transition-colors cursor-pointer ${
+              status === 'reading'
+                ? 'text-[var(--accent)]'
+                : 'text-[var(--muted)] hover:text-[var(--text)]'
+            }`}
+            title="Currently Reading"
           >
-            <Heart className="w-4 h-4" />
+            <BookOpen className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onUpdate(book.id, { reading_status: 'finished' })}
+            className={`p-1 rounded border-0 bg-transparent transition-colors cursor-pointer ${
+              status === 'finished'
+                ? 'text-[var(--accent)]'
+                : 'text-[var(--muted)] hover:text-[var(--text)]'
+            }`}
+            title="Mark as Finished"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDetails(book.id)}
+            className="p-1 rounded border-0 bg-transparent text-[var(--muted)] hover:text-[var(--text)] transition-colors cursor-pointer"
+            title="Details"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
           </button>
         </div>
-        <button type="button" className="book-details-trigger book-details-trigger-body" onClick={() => onDetails(book.id)}>
-          {book.author && <p className="sleek-book-author">{book.author}</p>}
-          <div className="book-progress-track" aria-label={`${progress}% complete`}>
-            <span style={{ width: `${progress}%` }} />
-          </div>
-        </button>
-        <div className="book-card-controls">
-          <div className="status-picker">
-            <button
-              type="button"
-              className={`status-btn${statusFor(book) === 'want_to_read' ? ' is-active' : ''}`}
-              onClick={() => onUpdate(book.id, { reading_status: 'want_to_read' })}
-              title="Want to Read"
-            >
-              <Clock className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              className={`status-btn${statusFor(book) === 'reading' ? ' is-active' : ''}`}
-              onClick={() => onUpdate(book.id, { reading_status: 'reading' })}
-              title="Currently Reading"
-            >
-              <BookOpen className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              className={`status-btn${statusFor(book) === 'finished' ? ' is-active' : ''}`}
-              onClick={() => onUpdate(book.id, { reading_status: 'finished' })}
-              title="Mark as Finished"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              className={`status-btn${statusFor(book) === 'dnf' ? ' is-active' : ''}`}
-              onClick={() => onUpdate(book.id, { reading_status: 'dnf' })}
-              title="DNF (Did Not Finish)"
-            >
-              <XCircle className="w-4 h-4" />
-            </button>
-          </div>
-          <span className="sleek-book-status">{progress}%</span>
-        </div>
       </div>
+
+      {/* Title & Author below */}
+      <p
+        onClick={() => onOpen(book.id)}
+        className="t cursor-pointer hover:text-[var(--accent)] transition-colors"
+        title={book.title}
+      >
+        {book.title}
+      </p>
+      <p className="a" title={book.author || 'Unknown Author'}>
+        {book.author || 'Unknown Author'}
+      </p>
+
+      {/* 2px progress line on books in progress */}
+      {isReading && progress > 0 && (
+        <div className="pg">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+      )}
     </div>
   );
 }
 
+// Book Details Drawer
 function BookDetailsDrawer({
   book,
   noteCount,
@@ -716,10 +977,14 @@ function BookDetailsDrawer({
   onUpdate: (bookId: string, update: Partial<Book>) => void;
   onDelete: (book: Book) => void;
 }) {
-  const progress = Math.max(0, Math.min(100, Number(book.progress_percent || 0)));
+  const progress = Math.max(0, Math.min(100, Math.round(Number(book.progress_percent || 0))));
   const totalSeconds = Number(book.total_reading_seconds || 0);
-  const lastRead = book.last_read_at ? new Date(book.last_read_at).toLocaleDateString() : 'Not started';
-  const finishedAt = book.finished_at ? new Date(book.finished_at).toLocaleDateString() : null;
+  const lastRead = book.last_read_at
+    ? new Date(book.last_read_at).toLocaleDateString()
+    : 'Not started';
+  const finishedAt = book.finished_at
+    ? new Date(book.finished_at).toLocaleDateString()
+    : null;
   const [isEditing, setIsEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState(book.title);
   const [authorDraft, setAuthorDraft] = useState(book.author || '');
@@ -741,11 +1006,18 @@ function BookDetailsDrawer({
   };
 
   return (
-    <div className="book-details-backdrop" onClick={(event) => event.target === event.currentTarget && onClose()}>
+    <div
+      className="book-details-backdrop"
+      onClick={(event) => event.target === event.currentTarget && onClose()}
+    >
       <aside className="book-details-drawer" aria-label={`${book.title} details`}>
-        <div className="book-details-cover-glow" style={book.cover_url ? { backgroundImage: `url(${book.cover_url})` } : undefined} />
         <div className="book-details-header">
-          <button type="button" className="book-details-close" onClick={onClose} aria-label="Close details">
+          <button
+            type="button"
+            className="book-details-close"
+            onClick={onClose}
+            aria-label="Close details"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -753,10 +1025,19 @@ function BookDetailsDrawer({
         <div className="book-details-hero">
           <div className="book-details-cover">
             {book.cover_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={book.cover_url} alt="" />
+              <Image
+                src={book.cover_url}
+                alt={book.title}
+                fill
+                sizes="120px"
+                className="object-cover rounded-[6px]"
+                unoptimized={book.cover_url.startsWith('data:')}
+              />
             ) : (
-              <div className="sleek-book-placeholder">
+              <div
+                className="w-full h-full flex items-center justify-center p-2 text-center rounded-[6px]"
+                style={{ background: spineFor(book), color: '#fff3e6' }}
+              >
                 <BookOpen className="w-8 h-8" />
               </div>
             )}
@@ -847,7 +1128,11 @@ function BookDetailsDrawer({
               Save
             </button>
           ) : (
-            <button type="button" className="book-details-favorite" onClick={() => setIsEditing(true)}>
+            <button
+              type="button"
+              className="book-details-favorite"
+              onClick={() => setIsEditing(true)}
+            >
               <Edit3 className="w-4 h-4" />
               Edit
             </button>
@@ -857,14 +1142,18 @@ function BookDetailsDrawer({
             className={`book-details-favorite${book.is_favorite ? ' is-active' : ''}`}
             onClick={() => onUpdate(book.id, { is_favorite: !book.is_favorite })}
           >
-            <Heart className="w-4 h-4" />
+            <Heart className={`w-4 h-4 ${book.is_favorite ? 'fill-[var(--accent)] text-[var(--accent)]' : ''}`} />
             {book.is_favorite ? 'Favorited' : 'Favorite'}
           </button>
           <button type="button" className="book-details-delete" onClick={() => onDelete(book)}>
             <Trash2 className="w-4 h-4" />
             Delete
           </button>
-          <button type="button" className="btn-3d btn-3d-amber book-details-read" onClick={() => onOpen(book.id)}>
+          <button
+            type="button"
+            className="book-details-read h-10 px-5 rounded-[10px] bg-[var(--accent)] text-[var(--accent-ink)] font-semibold flex items-center justify-center gap-2 border-0 cursor-pointer"
+            onClick={() => onOpen(book.id)}
+          >
             <BookOpen className="w-4 h-4" />
             Read
           </button>
@@ -874,7 +1163,15 @@ function BookDetailsDrawer({
   );
 }
 
-function DetailStat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function DetailStat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Clock;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="book-details-stat">
       <Icon className="w-4 h-4" />
